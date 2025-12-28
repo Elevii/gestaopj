@@ -159,10 +159,18 @@ class FaturaService {
         tituloFatura = `${data.titulo} (${i + 1}/${repeticoes})`;
       }
 
+      // Obter userId do usuário logado se não fornecido
+      let userId = data.userId;
+      if (!userId) {
+        const currentUser = await authService.getCurrentUser();
+        userId = currentUser?.id;
+      }
+
       const novaFatura: Fatura = {
         id: faturaId,
         companyId: projeto.companyId,
         projetoId: data.projetoId,
+        userId: userId,
         titulo: tituloFatura,
         valor: data.valor,
         dataVencimento: dataVencimento.toISOString(),

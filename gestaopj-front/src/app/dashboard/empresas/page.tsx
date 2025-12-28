@@ -259,13 +259,24 @@ export default function EmpresasPage() {
               {companies.map((comp) => {
                 const isCurrent = comp.id === currentCompany?.id;
                 const companyName = comp.name || comp.membership?.companyId || "Empresa sem nome";
+                
+                const handleCardClick = async () => {
+                  // Se não for a empresa atual, trocar primeiro
+                  if (!isCurrent) {
+                    await handleSwitchCompany(comp.id);
+                  }
+                  // Redirecionar para detalhes da empresa
+                  router.push(`/dashboard/empresas/${comp.id}`);
+                };
+
                 return (
                   <div
                     key={comp.id}
-                    className={`bg-white dark:bg-gray-800 rounded-xl shadow-sm border-2 p-6 transition-all ${
+                    onClick={handleCardClick}
+                    className={`bg-white dark:bg-gray-800 rounded-xl shadow-sm border-2 p-6 transition-all cursor-pointer hover:shadow-md ${
                       isCurrent
                         ? "border-indigo-500 dark:border-indigo-500"
-                        : "border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600"
+                        : "border-gray-200 dark:border-gray-700 hover:border-indigo-300 dark:hover:border-indigo-600"
                     }`}
                   >
                     <div className="flex items-start justify-between mb-4">
@@ -289,27 +300,10 @@ export default function EmpresasPage() {
                     </div>
 
                     {comp.email && (
-                      <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                      <p className="text-sm text-gray-600 dark:text-gray-400">
                         {comp.email}
                       </p>
                     )}
-
-                    <div className="flex gap-2 mt-4">
-                      {!isCurrent && (
-                        <button
-                          onClick={() => handleSwitchCompany(comp.id)}
-                          className="flex-1 px-4 py-2 text-sm font-medium text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100 dark:bg-indigo-900/20 dark:text-indigo-400 dark:hover:bg-indigo-900/30 transition-colors"
-                        >
-                          Usar esta empresa
-                        </button>
-                      )}
-                      <Link
-                        href={`/dashboard/empresas/${comp.id}`}
-                        className="flex-1 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600 transition-colors text-center"
-                      >
-                        Gerenciar
-                      </Link>
-                    </div>
                   </div>
                 );
               })}

@@ -32,7 +32,7 @@ export default function EmpresaDetalhesPage() {
   const companyId = params.id as string;
   const { user: currentUser, refreshAuth } = useAuth();
   const { company: currentCompany } = useCompany();
-  const { canManageUsers, canChangeUserRoles, canRemoveUsers, canInviteUsers } =
+  const { canManageUsers, canChangeUserRoles, canRemoveUsers, canInviteUsers, canViewCompanyDetails } =
     usePermissions();
 
   const [company, setCompany] = useState<Company | null>(null);
@@ -354,13 +354,13 @@ export default function EmpresaDetalhesPage() {
             Voltar para empresas
           </Link>
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-            Gestão de Membros
+            {canViewCompanyDetails ? "Gestão de Membros" : "Detalhes da Empresa"}
           </h1>
           <p className="mt-2 text-gray-600 dark:text-gray-400">
             {company.name}
           </p>
         </div>
-        {canInviteUsers && (
+        {canInviteUsers && canViewCompanyDetails && (
           <button
             onClick={() => setShowInviteModal(true)}
             className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors flex items-center gap-2"
@@ -383,7 +383,55 @@ export default function EmpresaDetalhesPage() {
         )}
       </div>
 
-      {/* Lista de membros */}
+      {/* Informações básicas da empresa */}
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+        <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
+          Informações da Empresa
+        </h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Nome
+            </label>
+            <p className="text-gray-900 dark:text-white">{company.name}</p>
+          </div>
+          {company.cnpj && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                CNPJ
+              </label>
+              <p className="text-gray-900 dark:text-white">{company.cnpj}</p>
+            </div>
+          )}
+          {company.email && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Email
+              </label>
+              <p className="text-gray-900 dark:text-white">{company.email}</p>
+            </div>
+          )}
+          {company.phone && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Telefone
+              </label>
+              <p className="text-gray-900 dark:text-white">{company.phone}</p>
+            </div>
+          )}
+          {company.address && (
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Endereço
+              </label>
+              <p className="text-gray-900 dark:text-white">{company.address}</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Lista de membros - apenas para quem tem permissão */}
+      {canViewCompanyDetails && (
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
@@ -536,9 +584,10 @@ export default function EmpresaDetalhesPage() {
           </table>
         </div>
       </div>
+      )}
 
       {/* Modal de Convite */}
-      {showInviteModal && (
+      {showInviteModal && canViewCompanyDetails && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl p-6 max-w-md w-full mx-4">
             <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
@@ -607,7 +656,7 @@ export default function EmpresaDetalhesPage() {
       )}
 
       {/* Modal de Detalhes/Edição do Membro */}
-      {showEditMemberModal && selectedMember && (
+      {showEditMemberModal && selectedMember && canViewCompanyDetails && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
             <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">

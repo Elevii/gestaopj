@@ -20,6 +20,7 @@ export enum Permission {
 
   // Empresa
   EDIT_COMPANY = "edit_company",
+  VIEW_COMPANY_DETAILS = "view_company_details",
   TRANSFER_OWNERSHIP = "transfer_ownership",
   CANCEL_COMPANY = "cancel_company",
 
@@ -57,6 +58,7 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     Permission.CHANGE_PLAN,
     Permission.CANCEL_SUBSCRIPTION,
     Permission.EDIT_COMPANY,
+    Permission.VIEW_COMPANY_DETAILS,
     Permission.TRANSFER_OWNERSHIP,
     Permission.CANCEL_COMPANY,
     Permission.MANAGE_SETTINGS,
@@ -80,6 +82,7 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     Permission.REMOVE_USERS,
     Permission.CHANGE_USER_ROLES,
     Permission.EDIT_COMPANY,
+    Permission.VIEW_COMPANY_DETAILS,
     Permission.MANAGE_SETTINGS,
     Permission.VIEW_REPORTS,
     Permission.EXPORT_DATA,
@@ -96,7 +99,6 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     Permission.VIEW_PROJECTS,
     Permission.VIEW_REPORTS,
     Permission.CREATE_PROJECT,
-    Permission.EDIT_PROJECT,
   ],
   viewer: [
     // Apenas visualização

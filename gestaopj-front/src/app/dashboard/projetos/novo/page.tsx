@@ -8,7 +8,11 @@ import { useConfiguracoes } from "@/contexts/ConfiguracoesContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCompany } from "@/contexts/CompanyContext";
 import { companyService } from "@/services/companyService";
+import { companyMembershipService } from "@/services/companyMembershipService";
+import { projectMemberService } from "@/services/projectMemberService";
+import { userService } from "@/services/userService";
 import { Company } from "@/types/company";
+import { User } from "@/types/user";
 import { TipoCobranca } from "@/types";
 
 export default function NovoProjetoPage() {
@@ -18,6 +22,10 @@ export default function NovoProjetoPage() {
   const { company: currentCompany } = useAuth();
   const { company: activeCompany } = useCompany();
   const [isLoading, setIsLoading] = useState(false);
+  const [availableMembers, setAvailableMembers] = useState<Array<{ id: string; name: string; email: string }>>([]);
+  const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([]);
+  const [loadingMembers, setLoadingMembers] = useState(true);
+  const [memberFilter, setMemberFilter] = useState("");
   const [errors, setErrors] = useState<{
     empresa?: string;
     titulo?: string;
@@ -33,6 +41,35 @@ export default function NovoProjetoPage() {
     tipoCobranca: "horas" as TipoCobranca,
     horasUteisPorDia: "8",
   });
+
+  // Carregar membros da empresa
+  useEffect(() => {
+    const loadMembers = async () => {
+      if (!activeCompany) {
+        setLoadingMembers(false);
+        return;
+      }
+
+      try {
+        setLoadingMembers(true);
+        const memberships = await companyMembershipService.findByCompanyId(activeCompany.id);
+        const membersData = await Promise.all(
+          memberships.map(async (membership) => {
+            const user = await userService.findById(membership.userId);
+            return user ? { id: user.id, name: user.name, email: user.email } : null;
+          })
+        );
+        const validMembers = membersData.filter((m): m is { id: string; name: string; email: string } => m !== null);
+        setAvailableMembers(validMembers);
+      } catch (error) {
+        console.error("Erro ao carregar membros:", error);
+      } finally {
+        setLoadingMembers(false);
+      }
+    };
+
+    loadMembers();
+  }, [activeCompany]);
 
   // Inicializar com horas úteis padrão das configurações
   useEffect(() => {
@@ -161,6 +198,18 @@ export default function NovoProjetoPage() {
         valorFixo: formData.tipoCobranca === "fixo" ? parseCurrency(formData.valorFixo) : undefined,
         horasUteisPorDia: parseHorasUteis(formData.horasUteisPorDia),
       });
+
+      // Criar associações de membros ao projeto
+      if (selectedMemberIds.length > 0) {
+        await Promise.all(
+          selectedMemberIds.map((userId) =>
+            projectMemberService.create({
+              projetoId: novoProjeto.id,
+              userId: userId,
+            })
+          )
+        );
+      }
       
       // Redirecionar para detalhes do projeto criado
       router.push(`/dashboard/projetos/${novoProjeto.id}`);
@@ -233,6 +282,113 @@ export default function NovoProjetoPage() {
                   Nenhuma empresa selecionada. Selecione uma empresa no menu superior.
                 </p>
               </div>
+            )}
+          </div>
+
+          {/* Seleção de Membros */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Membros do Projeto
+            </label>
+            {loadingMembers ? (
+              <div className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 flex items-center">
+                <svg
+                  className="animate-spin h-5 w-5 text-gray-400 mr-2"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  ></circle>
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  ></path>
+                </svg>
+                <span className="text-gray-500 dark:text-gray-400">Carregando membros...</span>
+              </div>
+            ) : availableMembers.length === 0 ? (
+              <div className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700">
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  Nenhum membro disponível na empresa
+                </p>
+              </div>
+            ) : (
+              <div className="border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700">
+                {/* Campo de filtro */}
+                <div className="p-3 border-b border-gray-200 dark:border-gray-600">
+                  <input
+                    type="text"
+                    placeholder="Filtrar membros por nome ou email..."
+                    value={memberFilter}
+                    onChange={(e) => setMemberFilter(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors dark:bg-gray-800 dark:text-white text-sm"
+                  />
+                </div>
+                {/* Lista de membros com checkboxes */}
+                <div className="max-h-60 overflow-y-auto p-2">
+                  {availableMembers
+                    .filter((member) => {
+                      const filter = memberFilter.toLowerCase();
+                      return (
+                        member.name.toLowerCase().includes(filter) ||
+                        member.email.toLowerCase().includes(filter)
+                      );
+                    })
+                    .map((member) => (
+                      <label
+                        key={member.id}
+                        className="flex items-center space-x-3 p-2 hover:bg-gray-50 dark:hover:bg-gray-600 rounded cursor-pointer"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedMemberIds.includes(member.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedMemberIds([...selectedMemberIds, member.id]);
+                            } else {
+                              setSelectedMemberIds(
+                                selectedMemberIds.filter((id) => id !== member.id)
+                              );
+                            }
+                          }}
+                          className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-gray-900 dark:text-white">
+                            {member.name}
+                          </p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                            {member.email}
+                          </p>
+                        </div>
+                      </label>
+                    ))}
+                  {availableMembers.filter((member) => {
+                    const filter = memberFilter.toLowerCase();
+                    return (
+                      member.name.toLowerCase().includes(filter) ||
+                      member.email.toLowerCase().includes(filter)
+                    );
+                  }).length === 0 && (
+                    <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">
+                      Nenhum membro encontrado
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+            {availableMembers.length > 0 && selectedMemberIds.length > 0 && (
+              <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                {selectedMemberIds.length} membro(s) selecionado(s)
+              </p>
             )}
           </div>
 

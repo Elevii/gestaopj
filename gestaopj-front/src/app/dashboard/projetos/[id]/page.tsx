@@ -7,8 +7,14 @@ import { useProjetos } from "@/contexts/ProjetoContext";
 import { useAtividades } from "@/contexts/AtividadeContext";
 import { useFaturamento } from "@/contexts/FaturamentoContext";
 import { useConfiguracoes } from "@/contexts/ConfiguracoesContext";
+import { usePermissions } from "@/hooks/usePermissions";
+import { useAuth } from "@/contexts/AuthContext";
+import { useCompany } from "@/contexts/CompanyContext";
+import { projectMemberService } from "@/services/projectMemberService";
+import { userService } from "@/services/userService";
 import { Atividade } from "@/types";
 import { useFormatDate } from "@/hooks/useFormatDate";
+import { useEffect } from "react";
 
 export default function ProjetoDetalhesPage() {
   const params = useParams();
@@ -19,22 +25,107 @@ export default function ProjetoDetalhesPage() {
   const { faturas, updateFatura } = useFaturamento();
   const { configuracoes } = useConfiguracoes();
   const { formatDate } = useFormatDate();
+  const { canEditProject, canDeleteProject } = usePermissions();
+  const { user, userCompanies } = useAuth();
+  const { company } = useCompany();
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [activityToDelete, setActivityToDelete] = useState<string | null>(null);
   const [isDeletingActivity, setIsDeletingActivity] = useState(false);
+  const [hasAccess, setHasAccess] = useState<boolean | null>(null);
+  const [projectMembers, setProjectMembers] = useState<Array<{ id: string; name: string; email: string }>>([]);
+  const [loadingMembers, setLoadingMembers] = useState(true);
   
   const [activeTab, setActiveTab] = useState<'atividades' | 'financeiro'>('atividades');
 
   const projeto = getProjetoById(projetoId);
 
-  if (!projeto) {
+  // Carregar membros do projeto
+  useEffect(() => {
+    const loadMembers = async () => {
+      if (!projetoId) {
+        setLoadingMembers(false);
+        return;
+      }
+
+      try {
+        setLoadingMembers(true);
+        const members = await projectMemberService.findByProjectId(projetoId);
+        const membersData = await Promise.all(
+          members.map(async (pm) => {
+            const user = await userService.findById(pm.userId);
+            return user ? { id: user.id, name: user.name, email: user.email } : null;
+          })
+        );
+        const validMembers = membersData.filter((m): m is { id: string; name: string; email: string } => m !== null);
+        setProjectMembers(validMembers);
+      } catch (error) {
+        console.error("Erro ao carregar membros do projeto:", error);
+      } finally {
+        setLoadingMembers(false);
+      }
+    };
+
+    loadMembers();
+  }, [projetoId]);
+
+  // Verificar acesso ao projeto para Members
+  useEffect(() => {
+    const checkAccess = async () => {
+      if (!projeto || !user || !company) {
+        setHasAccess(false);
+        return;
+      }
+
+      const membership = userCompanies.find((m) => m.companyId === company.id);
+      const role = membership?.role;
+
+      // Owner, Admin e Viewer sempre têm acesso
+      if (role === "owner" || role === "admin" || role === "viewer") {
+        setHasAccess(true);
+        return;
+      }
+
+      // Member precisa estar associado ao projeto
+      if (role === "member") {
+        const projectMember = await projectMemberService.findByProjectAndUser(
+          projetoId,
+          user.id
+        );
+        setHasAccess(!!projectMember);
+      } else {
+        setHasAccess(false);
+      }
+    };
+
+    checkAccess();
+  }, [projeto, user, company, projetoId, userCompanies]);
+
+  // Redirecionar se não tiver acesso
+  useEffect(() => {
+    if (hasAccess === false) {
+      router.push("/dashboard/projetos");
+    }
+  }, [hasAccess, router]);
+
+  if (hasAccess === null) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600 dark:text-gray-400">Verificando acesso...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!projeto || hasAccess === false) {
     return (
       <div>
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-12 text-center">
           <p className="text-gray-600 dark:text-gray-400">
-            Projeto não encontrado
+            {!projeto ? "Projeto não encontrado" : "Você não tem acesso a este projeto"}
           </p>
           <Link
             href="/dashboard/projetos"
@@ -154,44 +245,48 @@ export default function ProjetoDetalhesPage() {
           </div>
         </div>
         <div className="flex items-center space-x-3">
-          <Link
-            href={`/dashboard/projetos/${projetoId}/editar`}
-            className="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-lg text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors"
-          >
-            <svg
-              className="w-5 h-5 mr-2"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
+          {canEditProject && (
+            <Link
+              href={`/dashboard/projetos/${projetoId}/editar`}
+              className="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-lg text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors"
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-              />
-            </svg>
-            Editar
-          </Link>
-          <button
-            onClick={() => setShowDeleteConfirm(true)}
-            className="inline-flex items-center px-4 py-2 border border-red-300 dark:border-red-600 text-sm font-medium rounded-lg text-red-700 dark:text-red-400 bg-white dark:bg-gray-700 hover:bg-red-50 dark:hover:bg-red-900/20 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors"
-          >
-            <svg
-              className="w-5 h-5 mr-2"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
+              <svg
+                className="w-5 h-5 mr-2"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                />
+              </svg>
+              Editar
+            </Link>
+          )}
+          {canDeleteProject && (
+            <button
+              onClick={() => setShowDeleteConfirm(true)}
+              className="inline-flex items-center px-4 py-2 border border-red-300 dark:border-red-600 text-sm font-medium rounded-lg text-red-700 dark:text-red-400 bg-white dark:bg-gray-700 hover:bg-red-50 dark:hover:bg-red-900/20 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors"
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-              />
-            </svg>
-            Excluir
-          </button>
+              <svg
+                className="w-5 h-5 mr-2"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                />
+              </svg>
+              Excluir
+            </button>
+          )}
           <Link
             href={`/dashboard/projetos/${projetoId}/atividades/nova`}
             className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors"
@@ -330,6 +425,67 @@ export default function ProjetoDetalhesPage() {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Membros do Projeto */}
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+        <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
+          Membros do Projeto
+        </h2>
+        {loadingMembers ? (
+          <div className="flex items-center justify-center py-8">
+            <svg
+              className="animate-spin h-6 w-6 text-gray-400"
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+            >
+              <circle
+                className="opacity-25"
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                strokeWidth="4"
+              ></circle>
+              <path
+                className="opacity-75"
+                fill="currentColor"
+                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+              ></path>
+            </svg>
+          </div>
+        ) : projectMembers.length === 0 ? (
+          <p className="text-gray-500 dark:text-gray-400 text-center py-8">
+            Nenhum membro associado a este projeto
+          </p>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {projectMembers.map((member) => (
+              <div
+                key={member.id}
+                className="flex items-center space-x-3 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg"
+              >
+                <div className="h-10 w-10 rounded-full bg-indigo-600 flex items-center justify-center text-white font-medium">
+                  {member.name
+                    .split(" ")
+                    .map((n) => n[0])
+                    .join("")
+                    .toUpperCase()
+                    .substring(0, 2)}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                    {member.name}
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                    {member.email}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Tabs */}

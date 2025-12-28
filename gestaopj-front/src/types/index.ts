@@ -48,6 +48,20 @@ export interface CreateProjetoDTO {
   status?: StatusProjeto;
 }
 
+export interface ProjectMember {
+  id: string;
+  projetoId: string;
+  userId: string;
+  companyId: string; // Para facilitar filtragem
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateProjectMemberDTO {
+  projetoId: string;
+  userId: string;
+}
+
 export interface CreateAtividadeDTO {
   projetoId: string;
   titulo: string;
@@ -201,6 +215,7 @@ export interface Fatura {
   id: string;
   companyId: string; // ID da empresa
   projetoId: string;
+  userId?: string; // ID do usuário associado à fatura
   titulo: string;
   valor: number;
   dataVencimento: string; // ISO date
@@ -230,6 +245,7 @@ export interface CreateLembreteDTO {
 
 export interface CreateFaturaDTO {
   projetoId: string;
+  userId?: string; // ID do usuário associado à fatura
   titulo: string;
   valor: number;
   dataVencimento: string; // ISO date

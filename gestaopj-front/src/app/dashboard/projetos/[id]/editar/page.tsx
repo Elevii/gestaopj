@@ -6,6 +6,11 @@ import Link from "next/link";
 import { useProjetos } from "@/contexts/ProjetoContext";
 import { useConfiguracoes } from "@/contexts/ConfiguracoesContext";
 import { useAuth } from "@/contexts/AuthContext";
+import { usePermissions } from "@/hooks/usePermissions";
+import { useCompany } from "@/contexts/CompanyContext";
+import { projectMemberService } from "@/services/projectMemberService";
+import { companyMembershipService } from "@/services/companyMembershipService";
+import { userService } from "@/services/userService";
 import { companyService } from "@/services/companyService";
 import { Company } from "@/types/company";
 import { StatusProjeto, TipoCobranca } from "@/types";
@@ -16,12 +21,47 @@ export default function EditarProjetoPage() {
   const projetoId = params.id as string;
   const { getProjetoById, updateProjeto } = useProjetos();
   const { configuracoes } = useConfiguracoes();
-  const { userCompanies } = useAuth();
+  const { userCompanies, user } = useAuth();
+  const { company } = useCompany();
+  const { canEditProject } = usePermissions();
   const projeto = getProjetoById(projetoId);
+
+  // Verificar acesso e permissão
+  useEffect(() => {
+    const checkAccess = async () => {
+      if (!canEditProject) {
+        router.push(`/dashboard/projetos/${projetoId}`);
+        return;
+      }
+
+      if (!projeto || !user || !company) {
+        return;
+      }
+
+      const membership = userCompanies.find((m) => m.companyId === company.id);
+      const role = membership?.role;
+
+      // Owner, Admin sempre têm acesso
+      if (role === "owner" || role === "admin") {
+        return;
+      }
+
+      // Viewer e Member não podem editar
+      if (role === "viewer" || role === "member") {
+        router.push(`/dashboard/projetos/${projetoId}`);
+      }
+    };
+
+    checkAccess();
+  }, [canEditProject, projeto, user, company, projetoId, router, userCompanies]);
 
   const [isLoading, setIsLoading] = useState(false);
   const [availableCompanies, setAvailableCompanies] = useState<Company[]>([]);
   const [loadingCompanies, setLoadingCompanies] = useState(true);
+  const [availableMembers, setAvailableMembers] = useState<Array<{ id: string; name: string; email: string }>>([]);
+  const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([]);
+  const [loadingMembers, setLoadingMembers] = useState(true);
+  const [memberFilter, setMemberFilter] = useState("");
   const [errors, setErrors] = useState<{
     empresa?: string;
     titulo?: string;
@@ -73,6 +113,42 @@ export default function EditarProjetoPage() {
       loadCompanies();
     }
   }, [userCompanies]);
+
+  // Carregar membros da empresa e membros atuais do projeto
+  useEffect(() => {
+    const loadMembers = async () => {
+      if (!company) {
+        setLoadingMembers(false);
+        return;
+      }
+
+      try {
+        setLoadingMembers(true);
+        // Buscar membros da empresa
+        const memberships = await companyMembershipService.findByCompanyId(company.id);
+        const membersData = await Promise.all(
+          memberships.map(async (membership) => {
+            const user = await userService.findById(membership.userId);
+            return user ? { id: user.id, name: user.name, email: user.email } : null;
+          })
+        );
+        const validMembers = membersData.filter((m): m is { id: string; name: string; email: string } => m !== null);
+        setAvailableMembers(validMembers);
+
+        // Buscar membros atuais do projeto
+        if (projetoId) {
+          const projectMembers = await projectMemberService.findByProjectId(projetoId);
+          setSelectedMemberIds(projectMembers.map((pm) => pm.userId));
+        }
+      } catch (error) {
+        console.error("Erro ao carregar membros:", error);
+      } finally {
+        setLoadingMembers(false);
+      }
+    };
+
+    loadMembers();
+  }, [company, projetoId]);
 
   useEffect(() => {
     if (projeto && availableCompanies.length > 0) {
@@ -238,6 +314,29 @@ export default function EditarProjetoPage() {
         status: formData.status,
       });
 
+      // Atualizar associações de membros
+      // Buscar membros atuais
+      const currentMembers = await projectMemberService.findByProjectId(projetoId);
+      const currentMemberIds = new Set(currentMembers.map((m) => m.userId));
+      const newMemberIds = new Set(selectedMemberIds);
+
+      // Remover membros que não estão mais selecionados
+      for (const member of currentMembers) {
+        if (!newMemberIds.has(member.userId)) {
+          await projectMemberService.deleteByUserAndProject(member.userId, projetoId);
+        }
+      }
+
+      // Adicionar novos membros
+      for (const userId of selectedMemberIds) {
+        if (!currentMemberIds.has(userId)) {
+          await projectMemberService.create({
+            projetoId: projetoId,
+            userId: userId,
+          });
+        }
+      }
+
       router.push(`/dashboard/projetos/${projetoId}`);
     } catch (error) {
       console.error("Erro ao atualizar projeto:", error);
@@ -361,6 +460,116 @@ export default function EditarProjetoPage() {
                   </p>
                 )}
               </>
+            )}
+          </div>
+
+          {/* Seleção de Membros */}
+          <div>
+            <label
+              htmlFor="membros"
+              className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+            >
+              Membros do Projeto
+            </label>
+            {loadingMembers ? (
+              <div className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 flex items-center">
+                <svg
+                  className="animate-spin h-5 w-5 text-gray-400 mr-2"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  ></circle>
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  ></path>
+                </svg>
+                <span className="text-gray-500 dark:text-gray-400">Carregando membros...</span>
+              </div>
+            ) : availableMembers.length === 0 ? (
+              <div className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700">
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  Nenhum membro disponível na empresa
+                </p>
+              </div>
+            ) : (
+              <div className="border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700">
+                {/* Campo de filtro */}
+                <div className="p-3 border-b border-gray-200 dark:border-gray-600">
+                  <input
+                    type="text"
+                    placeholder="Filtrar membros por nome ou email..."
+                    value={memberFilter}
+                    onChange={(e) => setMemberFilter(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors dark:bg-gray-800 dark:text-white text-sm"
+                  />
+                </div>
+                {/* Lista de membros com checkboxes */}
+                <div className="max-h-60 overflow-y-auto p-2">
+                  {availableMembers
+                    .filter((member) => {
+                      const filter = memberFilter.toLowerCase();
+                      return (
+                        member.name.toLowerCase().includes(filter) ||
+                        member.email.toLowerCase().includes(filter)
+                      );
+                    })
+                    .map((member) => (
+                      <label
+                        key={member.id}
+                        className="flex items-center space-x-3 p-2 hover:bg-gray-50 dark:hover:bg-gray-600 rounded cursor-pointer"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedMemberIds.includes(member.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedMemberIds([...selectedMemberIds, member.id]);
+                            } else {
+                              setSelectedMemberIds(
+                                selectedMemberIds.filter((id) => id !== member.id)
+                              );
+                            }
+                          }}
+                          className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-gray-900 dark:text-white">
+                            {member.name}
+                          </p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                            {member.email}
+                          </p>
+                        </div>
+                      </label>
+                    ))}
+                  {availableMembers.filter((member) => {
+                    const filter = memberFilter.toLowerCase();
+                    return (
+                      member.name.toLowerCase().includes(filter) ||
+                      member.email.toLowerCase().includes(filter)
+                    );
+                  }).length === 0 && (
+                    <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">
+                      Nenhum membro encontrado
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+            {availableMembers.length > 0 && selectedMemberIds.length > 0 && (
+              <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                {selectedMemberIds.length} membro(s) selecionado(s)
+              </p>
             )}
           </div>
 
