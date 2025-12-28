@@ -1,11 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useProjetos } from "@/contexts/ProjetoContext";
 import { useAtividades } from "@/contexts/AtividadeContext";
 import { useOrcamentos } from "@/contexts/OrcamentoContext";
+import { useAuth } from "@/contexts/AuthContext";
+import { useCompany } from "@/contexts/CompanyContext";
 import {
   OrcamentoCampoAtividade,
   OrcamentoEntregavel,
@@ -18,6 +20,17 @@ import {
 
 export default function NovoOrcamentoPage() {
   const router = useRouter();
+  const { userCompanies } = useAuth();
+  const { company } = useCompany();
+
+  // Verificar acesso - membros não podem acessar
+  useEffect(() => {
+    if (!company) return;
+    const membership = userCompanies.find((m) => m.companyId === company.id);
+    if (membership?.role === "member") {
+      router.push("/dashboard");
+    }
+  }, [company, userCompanies, router]);
   const { projetos } = useProjetos();
   const { atividades } = useAtividades();
   const { createOrcamento } = useOrcamentos();

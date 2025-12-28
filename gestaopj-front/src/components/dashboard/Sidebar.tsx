@@ -1,8 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useAuth } from "@/contexts/AuthContext";
+import { useCompany } from "@/contexts/CompanyContext";
 
 interface NavItem {
   name: string;
@@ -159,6 +161,29 @@ interface SidebarProps {
 
 export default function Sidebar({ isOpen, onToggle }: SidebarProps) {
   const pathname = usePathname();
+  const { userCompanies } = useAuth();
+  const { company } = useCompany();
+
+  // Obter role do usuário na empresa atual
+  const currentRole = useMemo(() => {
+    if (!company) return null;
+    const membership = userCompanies.find((m) => m.companyId === company.id);
+    return membership?.role || null;
+  }, [company, userCompanies]);
+
+  // Filtrar navegação baseado no role
+  const filteredNavigation = useMemo(() => {
+    // Se for member, remover Orçamentos, Empresas e Configurações
+    if (currentRole === "member") {
+      return navigation.filter(
+        (item) =>
+          item.href !== "/dashboard/orcamentos" &&
+          item.href !== "/dashboard/empresas" &&
+          item.href !== "/dashboard/configuracoes"
+      );
+    }
+    return navigation;
+  }, [currentRole]);
 
   return (
     <>
@@ -221,7 +246,7 @@ export default function Sidebar({ isOpen, onToggle }: SidebarProps) {
 
           {/* Navigation */}
           <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
-            {navigation.map((item) => {
+            {filteredNavigation.map((item) => {
               const isActive = pathname === item.href;
               return (
                 <Link

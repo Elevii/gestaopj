@@ -1,7 +1,10 @@
 "use client";
 
 import { useState, FormEvent, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { useConfiguracoes } from "@/contexts/ConfiguracoesContext";
+import { useAuth } from "@/contexts/AuthContext";
+import { useCompany } from "@/contexts/CompanyContext";
 
 const FUSOS_HORARIOS = [
   { value: "America/Sao_Paulo", label: "São Paulo (UTC-3)" },
@@ -22,9 +25,21 @@ const FORMATOS_DATA = [
 ];
 
 export default function ConfiguracoesPage() {
+  const router = useRouter();
   const { configuracoes, loading, updateConfiguracoes } = useConfiguracoes();
+  const { userCompanies } = useAuth();
+  const { company } = useCompany();
   const [isSaving, setIsSaving] = useState(false);
   const [successMessage, setSuccessMessage] = useState(false);
+
+  // Verificar acesso - membros não podem acessar
+  useEffect(() => {
+    if (!company) return;
+    const membership = userCompanies.find((m) => m.companyId === company.id);
+    if (membership?.role === "member") {
+      router.push("/dashboard");
+    }
+  }, [company, userCompanies, router]);
   const [errors, setErrors] = useState<{
     nomeEmpresa?: string;
     horasUteisPadrao?: string;

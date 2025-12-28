@@ -1,16 +1,32 @@
 "use client";
 
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import EmptyState from "@/components/dashboard/EmptyState";
 import { useOrcamentos } from "@/contexts/OrcamentoContext";
 import { useProjetos } from "@/contexts/ProjetoContext";
+import { useAuth } from "@/contexts/AuthContext";
+import { useCompany } from "@/contexts/CompanyContext";
 import { useMemo } from "react";
 import { useFormatDate } from "@/hooks/useFormatDate";
 
 export default function OrcamentosPage() {
+  const router = useRouter();
   const { orcamentos, loading, deleteOrcamento } = useOrcamentos();
   const { projetos } = useProjetos();
   const { formatDate } = useFormatDate();
+  const { userCompanies } = useAuth();
+  const { company } = useCompany();
+
+  // Verificar acesso - membros não podem acessar
+  useEffect(() => {
+    if (!company) return;
+    const membership = userCompanies.find((m) => m.companyId === company.id);
+    if (membership?.role === "member") {
+      router.push("/dashboard");
+    }
+  }, [company, userCompanies, router]);
 
   const projetoById = useMemo(() => {
     const map = new Map<string, { titulo: string; empresa: string }>();

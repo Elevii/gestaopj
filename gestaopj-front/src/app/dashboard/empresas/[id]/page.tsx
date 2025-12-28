@@ -30,10 +30,19 @@ export default function EmpresaDetalhesPage() {
   const router = useRouter();
   const params = useParams();
   const companyId = params.id as string;
-  const { user: currentUser, refreshAuth } = useAuth();
+  const { user: currentUser, refreshAuth, userCompanies } = useAuth();
   const { company: currentCompany } = useCompany();
   const { canManageUsers, canChangeUserRoles, canRemoveUsers, canInviteUsers, canViewCompanyDetails } =
     usePermissions();
+
+  // Verificar acesso - membros não podem acessar
+  useEffect(() => {
+    if (!currentCompany) return;
+    const membership = userCompanies.find((m) => m.companyId === currentCompany.id);
+    if (membership?.role === "member") {
+      router.push("/dashboard");
+    }
+  }, [currentCompany, userCompanies, router]);
 
   const [company, setCompany] = useState<Company | null>(null);
   const [members, setMembers] = useState<MemberWithUser[]>([]);

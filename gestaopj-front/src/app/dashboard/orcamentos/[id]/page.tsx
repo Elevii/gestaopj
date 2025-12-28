@@ -1,16 +1,31 @@
 "use client";
 
+import { useEffect } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { useOrcamentos } from "@/contexts/OrcamentoContext";
 import { useProjetos } from "@/contexts/ProjetoContext";
 import { useAtividades } from "@/contexts/AtividadeContext";
+import { useAuth } from "@/contexts/AuthContext";
+import { useCompany } from "@/contexts/CompanyContext";
 import { exportOrcamentoToPdf } from "@/utils/exportOrcamento";
 
 export default function OrcamentoDetalhePage() {
   const params = useParams();
+  const router = useRouter();
   const id = params.id as string;
+  const { userCompanies } = useAuth();
+  const { company } = useCompany();
+
+  // Verificar acesso - membros não podem acessar
+  useEffect(() => {
+    if (!company) return;
+    const membership = userCompanies.find((m) => m.companyId === company.id);
+    if (membership?.role === "member") {
+      router.push("/dashboard");
+    }
+  }, [company, userCompanies, router]);
   const { getOrcamentoById } = useOrcamentos();
   const { getProjetoById } = useProjetos();
   const { atividades } = useAtividades();
