@@ -3,6 +3,7 @@
 import { useState, FormEvent, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import { authService } from "@/services/authService";
 
 export default function LoginForm() {
   const searchParams = useSearchParams();
@@ -56,18 +57,16 @@ export default function LoginForm() {
       return;
     }
 
-    // Simular login (aqui você integraria com a API)
+    // Login usando authService
     setIsLoading(true);
     try {
-      // TODO: Integrar com API de autenticação
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-      console.log("Login:", { email, password });
+      await authService.login({ email, password });
       // Redirecionar para o dashboard após login bem-sucedido
       router.push("/dashboard");
-    } catch (error) {
+    } catch (error: any) {
       console.error("Erro no login:", error);
       setErrors({
-        email: "Credenciais inválidas. Tente novamente.",
+        email: error.message || "Credenciais inválidas. Tente novamente.",
       });
     } finally {
       setIsLoading(false);

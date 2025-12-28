@@ -1,5 +1,6 @@
 import { Projeto, CreateProjetoDTO } from "@/types";
 import { DEFAULT_HORAS_UTEIS_POR_DIA } from "@/utils/estimativas";
+import { authService } from "./authService";
 
 // Simulação de API - em produção será substituído por chamadas HTTP reais
 class ProjetoService {
@@ -13,7 +14,7 @@ class ProjetoService {
       const parsed = stored ? (JSON.parse(stored) as any[]) : [];
       if (!Array.isArray(parsed)) return [];
 
-      // Migração: adiciona horasUteisPorDia (default 8) e status (default "ativo") para projetos antigos
+      // Migração: adiciona horasUteisPorDia (default 8), status (default "ativo") e companyId para projetos antigos
       let needsSave = false;
       const migrated = parsed.map((raw) => {
         if (raw && typeof raw === "object") {
@@ -26,6 +27,8 @@ class ProjetoService {
             needsSave = true;
             updates.status = "ativo";
           }
+          // companyId será adicionado apenas se não existir (para compatibilidade)
+          // Em novos projetos, será obrigatório
           return { ...raw, ...updates };
         }
         return raw;
@@ -51,10 +54,23 @@ class ProjetoService {
     }
   }
 
-  async findAll(): Promise<Projeto[]> {
+  async findAll(companyId?: string): Promise<Projeto[]> {
     // Simula delay de rede
     await new Promise((resolve) => setTimeout(resolve, 300));
-    return this.getProjetosFromStorage();
+    const projetos = this.getProjetosFromStorage();
+    
+    // Se companyId fornecido, filtrar por empresa
+    if (companyId) {
+      return projetos.filter((p) => p.companyId === companyId);
+    }
+    
+    // Se não fornecido, usar empresa do usuário logado
+    const currentCompany = await authService.getCurrentCompany();
+    if (currentCompany) {
+      return projetos.filter((p) => p.companyId === currentCompany.id);
+    }
+    
+    return projetos;
   }
 
   async findById(id: string): Promise<Projeto | null> {
@@ -66,10 +82,21 @@ class ProjetoService {
   async create(data: CreateProjetoDTO): Promise<Projeto> {
     await new Promise((resolve) => setTimeout(resolve, 500));
     
+    // Garantir que companyId está presente
+    let companyId = data.companyId;
+    if (!companyId) {
+      const currentCompany = await authService.getCurrentCompany();
+      if (!currentCompany) {
+        throw new Error("Empresa não encontrada. Faça login novamente.");
+      }
+      companyId = currentCompany.id;
+    }
+    
     const projetos = this.getProjetosFromStorage();
     const novoProjeto: Projeto = {
       id: `proj_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       ...data,
+      companyId,
       status: data.status ?? "ativo",
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),

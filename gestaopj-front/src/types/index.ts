@@ -1,6 +1,7 @@
 export interface Projeto {
   id: string;
-  empresa: string;
+  companyId: string; // ID da empresa (novo campo)
+  empresa: string; // Nome da empresa (mantido para compatibilidade)
   titulo: string;
   tipoCobranca?: TipoCobranca;
   valorFixo?: number;
@@ -37,7 +38,8 @@ export interface Atividade {
 }
 
 export interface CreateProjetoDTO {
-  empresa: string;
+  companyId?: string; // ID da empresa (opcional - será adicionado automaticamente pelo contexto se não fornecido)
+  empresa: string; // Nome da empresa (mantido para compatibilidade)
   titulo: string;
   tipoCobranca: TipoCobranca;
   valorFixo?: number;
@@ -258,3 +260,9 @@ export interface UpdateConfiguracoesDTO {
   fusoHorario?: string;
   formatoData?: "dd/MM/yyyy" | "MM/dd/yyyy" | "yyyy-MM-dd";
 }
+
+// Exportar novos tipos
+export * from "./user";
+export * from "./company";
+export * from "./subscription";
+export * from "./permissions";

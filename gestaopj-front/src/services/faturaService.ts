@@ -6,6 +6,8 @@ import {
   CreateLembreteDTO,
 } from "@/types";
 import { addDays, addMonths, addWeeks, addYears, parseISO } from "date-fns";
+import { authService } from "./authService";
+import { projetoService } from "./projetoService";
 
 class FaturaService {
   private storageKey = "atuapj_faturas";
@@ -31,9 +33,26 @@ class FaturaService {
     }
   }
 
-  async findAll(): Promise<Fatura[]> {
+  async findAll(companyId?: string): Promise<Fatura[]> {
     await new Promise((resolve) => setTimeout(resolve, 300));
-    return this.getFaturasFromStorage();
+    const faturas = this.getFaturasFromStorage();
+    
+    // Se companyId fornecido, filtrar por empresa através dos projetos
+    if (companyId) {
+      const projetos = await projetoService.findAll(companyId);
+      const projetoIds = projetos.map((p) => p.id);
+      return faturas.filter((f) => projetoIds.includes(f.projetoId));
+    }
+    
+    // Se não fornecido, usar empresa do usuário logado
+    const currentCompany = await authService.getCurrentCompany();
+    if (currentCompany) {
+      const projetos = await projetoService.findAll(currentCompany.id);
+      const projetoIds = projetos.map((p) => p.id);
+      return faturas.filter((f) => projetoIds.includes(f.projetoId));
+    }
+    
+    return faturas;
   }
 
   async findByProjetoId(projetoId: string): Promise<Fatura[]> {

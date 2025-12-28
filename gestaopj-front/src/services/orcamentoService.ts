@@ -1,4 +1,6 @@
 import { CreateOrcamentoDTO, Orcamento } from "@/types";
+import { authService } from "./authService";
+import { projetoService } from "./projetoService";
 
 // Simulação de API - em produção será substituído por chamadas HTTP reais
 class OrcamentoService {
@@ -26,9 +28,26 @@ class OrcamentoService {
     }
   }
 
-  async findAll(): Promise<Orcamento[]> {
+  async findAll(companyId?: string): Promise<Orcamento[]> {
     await new Promise((resolve) => setTimeout(resolve, 200));
-    return this.getOrcamentosFromStorage();
+    const orcamentos = this.getOrcamentosFromStorage();
+    
+    // Se companyId fornecido, filtrar por empresa através dos projetos
+    if (companyId) {
+      const projetos = await projetoService.findAll(companyId);
+      const projetoIds = projetos.map((p) => p.id);
+      return orcamentos.filter((o) => projetoIds.includes(o.projetoId));
+    }
+    
+    // Se não fornecido, usar empresa do usuário logado
+    const currentCompany = await authService.getCurrentCompany();
+    if (currentCompany) {
+      const projetos = await projetoService.findAll(currentCompany.id);
+      const projetoIds = projetos.map((p) => p.id);
+      return orcamentos.filter((o) => projetoIds.includes(o.projetoId));
+    }
+    
+    return orcamentos;
   }
 
   async findById(id: string): Promise<Orcamento | null> {

@@ -1,5 +1,7 @@
-import { Atividade, CreateAtividadeDTO, StatusAtividade } from "@/types";
+import { Atividade, CreateAtividadeDTO, StatusAtividade, Projeto } from "@/types";
 import { calcularDataFimEstimada } from "@/utils/estimativas";
+import { authService } from "./authService";
+import { projetoService } from "./projetoService";
 
 // Simulação de API - em produção será substituído por chamadas HTTP reais
 class AtividadeService {
@@ -64,9 +66,26 @@ class AtividadeService {
     return calcularDataFimEstimada(dataInicio, horas, horasUteisPorDia);
   }
 
-  async findAll(): Promise<Atividade[]> {
+  async findAll(companyId?: string): Promise<Atividade[]> {
     await new Promise((resolve) => setTimeout(resolve, 200));
-    return this.getAtividadesFromStorage();
+    const atividades = this.getAtividadesFromStorage();
+    
+    // Se companyId fornecido, filtrar por empresa através dos projetos
+    if (companyId) {
+      const projetos = await projetoService.findAll(companyId);
+      const projetoIds = projetos.map((p) => p.id);
+      return atividades.filter((a) => projetoIds.includes(a.projetoId));
+    }
+    
+    // Se não fornecido, usar empresa do usuário logado
+    const currentCompany = await authService.getCurrentCompany();
+    if (currentCompany) {
+      const projetos = await projetoService.findAll(currentCompany.id);
+      const projetoIds = projetos.map((p) => p.id);
+      return atividades.filter((a) => projetoIds.includes(a.projetoId));
+    }
+    
+    return atividades;
   }
 
   async findByProjetoId(projetoId: string): Promise<Atividade[]> {

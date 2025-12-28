@@ -9,6 +9,7 @@ import {
 } from "react";
 import { Projeto, CreateProjetoDTO } from "@/types";
 import { projetoService } from "@/services/projetoService";
+import { authService } from "@/services/authService";
 
 interface ProjetoContextType {
   projetos: Projeto[];
@@ -43,6 +44,15 @@ export function ProjetoProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const createProjeto = async (data: CreateProjetoDTO): Promise<Projeto> => {
+    // Garantir que companyId está presente
+    if (!data.companyId) {
+      const currentCompany = await authService.getCurrentCompany();
+      if (!currentCompany) {
+        throw new Error("Empresa não encontrada. Faça login novamente.");
+      }
+      data.companyId = currentCompany.id;
+    }
+    
     const novoProjeto = await projetoService.create(data);
     setProjetos((prev) => [...prev, novoProjeto]);
     return novoProjeto;
