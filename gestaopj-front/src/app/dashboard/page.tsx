@@ -1,13 +1,20 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState, useEffect } from "react";
 import StatCard from "@/components/dashboard/StatCard";
 import Link from "next/link";
 import { useDashboardMetrics } from "@/hooks/useDashboardMetrics";
 import { useProjetos } from "@/contexts/ProjetoContext";
 import { useAtividades } from "@/contexts/AtividadeContext";
 import { useAtuacoes } from "@/contexts/AtuacaoContext";
+import { useAuth } from "@/contexts/AuthContext";
+import { useCompany } from "@/contexts/CompanyContext";
 import { formatRelativeTime } from "@/utils/dashboardMetrics";
+import { memberInvoiceService } from "@/services/memberInvoiceService";
+import { companyMembershipService } from "@/services/companyMembershipService";
+import { atuacaoService } from "@/services/atuacaoService";
+import { projetoService } from "@/services/projetoService";
+import { MemberInvoice } from "@/types/memberInvoice";
 
 interface RecentActivity {
   id: string;
@@ -23,6 +30,23 @@ export default function DashboardPage() {
   const { projetos } = useProjetos();
   const { atividades } = useAtividades();
   const { atuacoes } = useAtuacoes();
+  const { userCompanies } = useAuth();
+  const { company } = useCompany();
+
+  // Detectar role do usuário
+  const isOwnerOrAdmin = useMemo(() => {
+    if (!company) return false;
+    const membership = userCompanies.find((m) => m.companyId === company.id);
+    return membership?.role === "owner" || membership?.role === "admin";
+  }, [company, userCompanies]);
+
+  // Estados para métricas administrativas
+  const [adminMetrics, setAdminMetrics] = useState({
+    estimativaPagamentos: 0,
+    totalAtuacoes: 0,
+    membrosAtivos: 0,
+    loading: true,
+  });
 
   // Ícones para os cards
   const icons = {
@@ -101,7 +125,128 @@ export default function DashboardPage() {
         />
       </svg>
     ),
+    estimativaPagamentos: (
+      <svg
+        className="w-8 h-8"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"
+        />
+      </svg>
+    ),
+    totalAtuacoes: (
+      <svg
+        className="w-8 h-8"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
+        />
+      </svg>
+    ),
+    membrosAtivos: (
+      <svg
+        className="w-8 h-8"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"
+        />
+      </svg>
+    ),
   };
+
+  // Calcular métricas administrativas
+  useEffect(() => {
+    if (!isOwnerOrAdmin || !company) {
+      setAdminMetrics({ estimativaPagamentos: 0, totalAtuacoes: 0, membrosAtivos: 0, loading: false });
+      return;
+    }
+
+    const loadAdminMetrics = async () => {
+      try {
+        setAdminMetrics((prev) => ({ ...prev, loading: true }));
+
+        // Obter primeiro e último dia do mês atual
+        const now = new Date();
+        const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+          .toISOString()
+          .split("T")[0];
+        const lastDayOfMonth = new Date(
+          now.getFullYear(),
+          now.getMonth() + 1,
+          0
+        )
+          .toISOString()
+          .split("T")[0];
+
+        // Calcular estimativa de pagamentos (faturas pendentes/atrasadas do mês)
+        const memberInvoices = await memberInvoiceService.findByCompanyId(company.id);
+        const invoicesMesAtual = memberInvoices.filter((inv) => {
+          // Extrair apenas a parte da data (yyyy-MM-dd) se vier em formato ISO completo
+          const periodoInicio = inv.periodoInicio.includes("T") 
+            ? inv.periodoInicio.split("T")[0] 
+            : inv.periodoInicio;
+          const periodoFim = inv.periodoFim.includes("T") 
+            ? inv.periodoFim.split("T")[0] 
+            : inv.periodoFim;
+          return (
+            periodoInicio >= firstDayOfMonth &&
+            periodoFim <= lastDayOfMonth &&
+            (inv.status === "pendente" || inv.status === "atrasado")
+          );
+        });
+        const estimativaPagamentos = invoicesMesAtual.reduce(
+          (sum, inv) => sum + inv.valor,
+          0
+        );
+
+        // Calcular total de registros de atuações do mês
+        const allAtuacoes = await atuacaoService.findAll();
+        const projetos = await projetoService.findAll(company.id);
+        const projetosIds = new Set(projetos.map((p) => p.id));
+        const atuacoesMesAtual = allAtuacoes.filter(
+          (a) =>
+            a.data >= firstDayOfMonth &&
+            a.data <= lastDayOfMonth &&
+            projetosIds.has(a.projetoId)
+        );
+        const totalAtuacoes = atuacoesMesAtual.length;
+
+        // Calcular membros ativos
+        const memberships = await companyMembershipService.findByCompanyId(company.id);
+        const membrosAtivos = memberships.filter((m) => m.active).length;
+
+        setAdminMetrics({
+          estimativaPagamentos,
+          totalAtuacoes,
+          membrosAtivos,
+          loading: false,
+        });
+      } catch (error) {
+        console.error("Erro ao carregar métricas administrativas:", error);
+        setAdminMetrics({ estimativaPagamentos: 0, totalAtuacoes: 0, membrosAtivos: 0, loading: false });
+      }
+    };
+
+    loadAdminMetrics();
+  }, [isOwnerOrAdmin, company]);
 
   // Calcular atividades recentes
   const recentActivities = useMemo<RecentActivity[]>(() => {
@@ -264,50 +409,96 @@ export default function DashboardPage() {
         {/* Header da página */}
         <div>
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-            Meu Dashboard
+            {isOwnerOrAdmin ? "Dashboard da Empresa" : "Meu Dashboard"}
           </h1>
           <p className="mt-2 text-gray-600 dark:text-gray-400">
-            Visão geral da sua atividade como PJ
+            {isOwnerOrAdmin 
+              ? "Visão geral das métricas e atividades da empresa"
+              : "Visão geral da sua atividade como PJ"}
           </p>
         </div>
 
         {/* Cards de estatísticas */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        <StatCard
-          title="Projetos Ativos"
-          value={metrics.projetosAtivos.value}
-          change={metrics.projetosAtivos.change}
-          icon={icons.projetosAtivos}
-          iconBgColor="bg-green-500"
-        />
-        <StatCard
-          title="Horas Trabalhadas (Mês)"
-          value={metrics.horasTotais.value}
-          change={metrics.horasTotais.change}
-          icon={icons.horasTotais}
-          iconBgColor="bg-blue-500"
-        />
-        <StatCard
-          title="Receita Total (Mês)"
-          value={metrics.receitaTotal.value}
-          change={metrics.receitaTotal.change}
-          icon={icons.receitaTotal}
-          iconBgColor="bg-yellow-500"
-        />
-        <StatCard
-          title="Média por Hora"
-          value={metrics.receitaHora.value}
-          change={metrics.receitaHora.change}
-          icon={icons.receitaHora}
-          iconBgColor="bg-indigo-500"
-        />
-        <StatCard
-          title="Projetos Novos (Mês)"
-          value={metrics.projetosNovos.value}
-          change={metrics.projetosNovos.change}
-          icon={icons.projetosNovos}
-          iconBgColor="bg-purple-500"
-        />
+        {isOwnerOrAdmin ? (
+          // Cards para Admin/Owner
+          <>
+            <StatCard
+              title="Projetos Ativos"
+              value={projetos.filter((p) => !p.status || p.status === "ativo").length}
+              icon={icons.projetosAtivos}
+              iconBgColor="bg-green-500"
+            />
+            <StatCard
+              title="Estimativa de Pagamentos (Mês)"
+              value={
+                adminMetrics.loading
+                  ? "Carregando..."
+                  : new Intl.NumberFormat("pt-BR", {
+                      style: "currency",
+                      currency: "BRL",
+                    }).format(adminMetrics.estimativaPagamentos)
+              }
+              icon={icons.estimativaPagamentos}
+              iconBgColor="bg-yellow-500"
+            />
+            <StatCard
+              title="Registros de Atuações (Mês)"
+              value={
+                adminMetrics.loading ? "Carregando..." : adminMetrics.totalAtuacoes.toString()
+              }
+              icon={icons.totalAtuacoes}
+              iconBgColor="bg-blue-500"
+            />
+            <StatCard
+              title="Membros Ativos"
+              value={
+                adminMetrics.loading ? "Carregando..." : adminMetrics.membrosAtivos.toString()
+              }
+              icon={icons.membrosAtivos}
+              iconBgColor="bg-purple-500"
+            />
+          </>
+        ) : (
+          // Cards para Membros (dashboard atual)
+          <>
+            <StatCard
+              title="Projetos Ativos"
+              value={metrics.projetosAtivos.value}
+              change={metrics.projetosAtivos.change}
+              icon={icons.projetosAtivos}
+              iconBgColor="bg-green-500"
+            />
+            <StatCard
+              title="Horas Trabalhadas (Mês)"
+              value={metrics.horasTotais.value}
+              change={metrics.horasTotais.change}
+              icon={icons.horasTotais}
+              iconBgColor="bg-blue-500"
+            />
+            <StatCard
+              title="Receita Total (Mês)"
+              value={metrics.receitaTotal.value}
+              change={metrics.receitaTotal.change}
+              icon={icons.receitaTotal}
+              iconBgColor="bg-yellow-500"
+            />
+            <StatCard
+              title="Média por Hora"
+              value={metrics.receitaHora.value}
+              change={metrics.receitaHora.change}
+              icon={icons.receitaHora}
+              iconBgColor="bg-indigo-500"
+            />
+            <StatCard
+              title="Projetos Novos (Mês)"
+              value={metrics.projetosNovos.value}
+              change={metrics.projetosNovos.change}
+              icon={icons.projetosNovos}
+              iconBgColor="bg-purple-500"
+            />
+          </>
+        )}
       </div>
 
       {/* Seção de ações rápidas */}
@@ -315,7 +506,7 @@ export default function DashboardPage() {
         <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
           Ações Rápidas
         </h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className={`grid grid-cols-1 ${isOwnerOrAdmin ? "md:grid-cols-3" : "md:grid-cols-1"} gap-4`}>
           <Link
             href="/dashboard/atuacao/novo"
             className="flex items-center space-x-3 p-4 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
@@ -345,63 +536,67 @@ export default function DashboardPage() {
             </div>
           </Link>
 
-          <Link
-            href="/dashboard/projetos/novo"
-            className="flex items-center space-x-3 p-4 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-          >
-            <div className="bg-green-100 dark:bg-green-900/50 rounded-lg p-3">
-              <svg
-                className="w-6 h-6 text-green-600 dark:text-green-400"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
+          {isOwnerOrAdmin && (
+            <>
+              <Link
+                href="/dashboard/projetos/novo"
+                className="flex items-center space-x-3 p-4 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
               >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 4v16m8-8H4"
-                />
-              </svg>
-            </div>
-            <div>
-              <p className="font-medium text-gray-900 dark:text-white">
-                Novo Projeto
-              </p>
-              <p className="text-sm text-gray-500 dark:text-gray-400">
-                Criar novo projeto
-              </p>
-            </div>
-          </Link>
+                <div className="bg-green-100 dark:bg-green-900/50 rounded-lg p-3">
+                  <svg
+                    className="w-6 h-6 text-green-600 dark:text-green-400"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M12 4v16m8-8H4"
+                    />
+                  </svg>
+                </div>
+                <div>
+                  <p className="font-medium text-gray-900 dark:text-white">
+                    Novo Projeto
+                  </p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    Criar novo projeto
+                  </p>
+                </div>
+              </Link>
 
-          <Link
-            href="/dashboard/orcamentos"
-            className="flex items-center space-x-3 p-4 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-          >
-            <div className="bg-blue-100 dark:bg-blue-900/50 rounded-lg p-3">
-              <svg
-                className="w-6 h-6 text-blue-600 dark:text-blue-400"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
+              <Link
+                href="/dashboard/orcamentos"
+                className="flex items-center space-x-3 p-4 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
               >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
-                />
-              </svg>
-            </div>
-            <div>
-              <p className="font-medium text-gray-900 dark:text-white">
-                Orçamentos
-              </p>
-              <p className="text-sm text-gray-500 dark:text-gray-400">
-                Criar e exportar orçamentos
-              </p>
-            </div>
-          </Link>
+                <div className="bg-blue-100 dark:bg-blue-900/50 rounded-lg p-3">
+                  <svg
+                    className="w-6 h-6 text-blue-600 dark:text-blue-400"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+                    />
+                  </svg>
+                </div>
+                <div>
+                  <p className="font-medium text-gray-900 dark:text-white">
+                    Orçamentos
+                  </p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    Criar e exportar orçamentos
+                  </p>
+                </div>
+              </Link>
+            </>
+          )}
         </div>
       </div>
 

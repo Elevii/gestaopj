@@ -55,7 +55,7 @@ export default function FaturaDetalhesPage() {
     if (!confirm("Tem certeza que deseja excluir esta fatura?")) return;
     setIsDeleting(true);
     await deleteFatura(id);
-    router.push("/dashboard/financeiro");
+    router.push("/dashboard/gestao-financeira");
   };
 
   const handleUpdateStatus = async (
@@ -138,7 +138,7 @@ export default function FaturaDetalhesPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <Link
-          href="/dashboard/financeiro"
+          href="/dashboard/gestao-financeira"
           className="text-sm text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200 inline-flex items-center"
         >
           <svg

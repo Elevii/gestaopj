@@ -11,6 +11,7 @@ import { AtividadeProvider } from "@/contexts/AtividadeContext";
 import { AtuacaoProvider } from "@/contexts/AtuacaoContext";
 import { OrcamentoProvider } from "@/contexts/OrcamentoContext";
 import { FaturamentoProvider } from "@/contexts/FaturamentoContext";
+import { FaturaEtapaProvider } from "@/contexts/FaturaEtapaContext";
 
 function DashboardContent({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, needsOnboarding, loading } = useAuth();
@@ -51,7 +52,8 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
           <AtuacaoProvider>
             <OrcamentoProvider>
               <FaturamentoProvider>
-                <div className="flex h-screen bg-gray-50 dark:bg-gray-900">
+                <FaturaEtapaProvider>
+                  <div className="flex h-screen bg-gray-50 dark:bg-gray-900">
                   <Sidebar
                     isOpen={sidebarOpen}
                     onToggle={() => setSidebarOpen(!sidebarOpen)}
@@ -63,6 +65,7 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
                     <main className="flex-1 overflow-y-auto p-6">{children}</main>
                   </div>
                 </div>
+                </FaturaEtapaProvider>
               </FaturamentoProvider>
             </OrcamentoProvider>
           </AtuacaoProvider>

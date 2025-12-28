@@ -201,7 +201,74 @@ export interface CreateOrcamentoDTO {
   entregaveis?: OrcamentoEntregavel[];
 }
 
-export type StatusFatura = "pendente" | "pago" | "atrasado" | "cancelado";
+export type StatusFatura = "pendente" | "pago" | "atrasado" | "cancelado" | "fatura_gerada" | "pagamentos_realizados";
+
+// Tipos para Etapas de Faturamento
+export type TipoEtapa = "envio_relatorio" | "geracao_nota_fiscal" | "outro";
+export type StatusEtapa = "pendente" | "enviado" | "aprovado" | "rejeitado";
+
+export interface FaturaEtapa {
+  id: string;
+  companyId: string; // Etapas são sempre por empresa
+  nome: string;
+  tipo: TipoEtapa;
+  dataLimite?: string; // ISO date, opcional
+  requerAnexo: boolean;
+  ordem: number; // Para ordenação
+  ativo: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateFaturaEtapaDTO {
+  companyId: string;
+  nome: string;
+  tipo: TipoEtapa;
+  dataLimite?: string;
+  requerAnexo: boolean;
+  ordem?: number;
+}
+
+export interface UpdateFaturaEtapaDTO {
+  nome?: string;
+  tipo?: TipoEtapa;
+  dataLimite?: string;
+  requerAnexo?: boolean;
+  ordem?: number;
+  ativo?: boolean;
+}
+
+export interface FaturaEtapaStatus {
+  id: string;
+  faturaId: string;
+  etapaId: string;
+  status: StatusEtapa;
+  anexoUrl?: string; // URL do arquivo anexado
+  anexoNome?: string; // Nome original do arquivo
+  observacoes?: string;
+  aprovadoPor?: string; // userId do aprovador
+  aprovadoEm?: string; // ISO date
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateFaturaEtapaStatusDTO {
+  faturaId: string;
+  etapaId: string;
+  status: StatusEtapa;
+  anexoUrl?: string;
+  anexoNome?: string;
+  observacoes?: string;
+}
+
+export interface UpdateFaturaEtapaStatusDTO {
+  status?: StatusEtapa;
+  anexoUrl?: string;
+  anexoNome?: string;
+  observacoes?: string;
+  aprovadoPor?: string;
+  aprovadoEm?: string;
+}
 
 export interface Lembrete {
   id: string;
@@ -226,6 +293,15 @@ export interface Fatura {
   comprovanteEnviado: boolean;
   lembretes: Lembrete[];
   observacoes?: string;
+  // Novos campos para gestão de faturamento
+  periodoInicio: string; // ISO date - início do período de faturamento
+  periodoFim: string; // ISO date - fim do período de faturamento
+  horasTrabalhadas: number; // Horas trabalhadas no período
+  tipoCalculo: "horas" | "fixo"; // Baseado em UserCompanySettings
+  valorPorHora?: number; // Para cálculo quando horista
+  aprovada: boolean; // Para workflow de aprovação
+  aprovadaPor?: string; // userId do aprovador
+  aprovadaEm?: string; // ISO date
   createdAt: string;
   updatedAt: string;
 }
@@ -265,6 +341,15 @@ export interface UpdateFaturaDTO {
   comprovanteEnviado?: boolean;
   observacoes?: string;
   lembretes?: Lembrete[];
+  // Novos campos
+  periodoInicio?: string;
+  periodoFim?: string;
+  horasTrabalhadas?: number;
+  tipoCalculo?: "horas" | "fixo";
+  valorPorHora?: number;
+  aprovada?: boolean;
+  aprovadaPor?: string;
+  aprovadaEm?: string;
 }
 
 export interface Configuracoes {

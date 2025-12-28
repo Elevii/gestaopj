@@ -5,9 +5,13 @@ import {
   Lembrete,
   CreateLembreteDTO,
 } from "@/types";
-import { addDays, addMonths, addWeeks, addYears, parseISO } from "date-fns";
+import { addDays, addMonths, addWeeks, addYears, parseISO, isWithinInterval, startOfDay, endOfDay } from "date-fns";
 import { authService } from "./authService";
 import { projetoService } from "./projetoService";
+import { atuacaoService } from "./atuacaoService";
+import { userCompanySettingsService } from "./userCompanySettingsService";
+import { faturaEtapaService } from "./faturaEtapaService";
+import { faturaEtapaStatusService } from "./faturaEtapaStatusService";
 
 class FaturaService {
   private storageKey = "atuapj_faturas";
@@ -166,13 +170,70 @@ class FaturaService {
         userId = currentUser?.id;
       }
 
+      // Validar período obrigatório
+      if (!data.periodoInicio || !data.periodoFim) {
+        throw new Error("Período de faturamento é obrigatório (periodoInicio e periodoFim)");
+      }
+
+      const periodoInicio = parseISO(data.periodoInicio);
+      const periodoFim = parseISO(data.periodoFim);
+
+      // Calcular horas trabalhadas do período (se não fornecido)
+      let horasTrabalhadas = data.horasTrabalhadas;
+      if (horasTrabalhadas === undefined && userId) {
+        const atuacoes = await atuacaoService.findAll(projeto.companyId);
+        const atuacoesDoPeriodo = atuacoes.filter((a) => {
+          if (a.projetoId !== data.projetoId || a.userId !== userId) return false;
+          const dataAtuacao = parseISO(a.data);
+          return isWithinInterval(dataAtuacao, {
+            start: startOfDay(periodoInicio),
+            end: endOfDay(periodoFim),
+          });
+        });
+        horasTrabalhadas = atuacoesDoPeriodo.reduce(
+          (total, a) => total + (a.horasUtilizadas || 0),
+          0
+        );
+      }
+
+      // Determinar tipo de cálculo e calcular valor
+      let tipoCalculo: "horas" | "fixo" = data.tipoCalculo || projeto.tipoCobranca || "fixo";
+      let valor = data.valor;
+      let valorPorHora = data.valorPorHora;
+
+      if (valor === undefined && userId) {
+        // Verificar se usuário é horista
+        const settings = await userCompanySettingsService.findByUserAndCompany(
+          userId,
+          projeto.companyId
+        );
+
+        if (settings?.horista || tipoCalculo === "horas") {
+          tipoCalculo = "horas";
+          valorPorHora = valorPorHora || projeto.valorHora || 0;
+          valor = (horasTrabalhadas || 0) * valorPorHora;
+        } else {
+          tipoCalculo = "fixo";
+          valor = projeto.valorFixo || 0;
+        }
+      } else if (valor === undefined) {
+        // Se não há userId, usar valor padrão do projeto
+        tipoCalculo = projeto.tipoCobranca || "fixo";
+        if (tipoCalculo === "horas") {
+          valorPorHora = valorPorHora || projeto.valorHora || 0;
+          valor = (horasTrabalhadas || 0) * valorPorHora;
+        } else {
+          valor = projeto.valorFixo || 0;
+        }
+      }
+
       const novaFatura: Fatura = {
         id: faturaId,
         companyId: projeto.companyId,
         projetoId: data.projetoId,
         userId: userId,
         titulo: tituloFatura,
-        valor: data.valor,
+        valor: valor,
         dataVencimento: dataVencimento.toISOString(),
         observacoes: data.observacoes,
         status: "pendente",
@@ -180,11 +241,27 @@ class FaturaService {
         notaFiscalEmitida: false,
         comprovanteEnviado: false,
         lembretes: lembretes,
+        periodoInicio: data.periodoInicio,
+        periodoFim: data.periodoFim,
+        horasTrabalhadas: horasTrabalhadas || 0,
+        tipoCalculo: tipoCalculo,
+        valorPorHora: valorPorHora,
+        aprovada: false,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
 
       novasFaturas.push(novaFatura);
+
+      // Criar status de etapas automaticamente para todas as etapas ativas da empresa
+      const etapasAtivas = await faturaEtapaService.findAtivasByCompanyId(projeto.companyId);
+      for (const etapa of etapasAtivas) {
+        await faturaEtapaStatusService.create({
+          faturaId: faturaId,
+          etapaId: etapa.id,
+          status: "pendente",
+        });
+      }
     }
 
     faturas.push(...novasFaturas);
@@ -280,6 +357,210 @@ class FaturaService {
     });
 
     return { recebidoMes, aReceber, atrasado };
+  }
+
+  // Métodos para filtros avançados
+  async findByUserId(userId: string, companyId?: string): Promise<Fatura[]> {
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    let faturas = this.getFaturasFromStorage();
+
+    faturas = faturas.filter((f) => f.userId === userId);
+
+    if (companyId) {
+      faturas = faturas.filter((f) => f.companyId === companyId);
+    } else {
+      const currentCompany = await authService.getCurrentCompany();
+      if (currentCompany) {
+        faturas = faturas.filter((f) => f.companyId === currentCompany.id);
+      }
+    }
+
+    return faturas.sort(
+      (a, b) =>
+        new Date(a.dataVencimento).getTime() -
+        new Date(b.dataVencimento).getTime()
+    );
+  }
+
+  async findByPeriodo(
+    periodoInicio: string,
+    periodoFim: string,
+    companyId?: string
+  ): Promise<Fatura[]> {
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    let faturas = this.getFaturasFromStorage();
+
+    const inicio = parseISO(periodoInicio);
+    const fim = parseISO(periodoFim);
+
+    faturas = faturas.filter((f) => {
+      const faturaInicio = parseISO(f.periodoInicio);
+      const faturaFim = parseISO(f.periodoFim);
+      return (
+        isWithinInterval(faturaInicio, { start: inicio, end: fim }) ||
+        isWithinInterval(faturaFim, { start: inicio, end: fim }) ||
+        (faturaInicio <= inicio && faturaFim >= fim)
+      );
+    });
+
+    if (companyId) {
+      faturas = faturas.filter((f) => f.companyId === companyId);
+    } else {
+      const currentCompany = await authService.getCurrentCompany();
+      if (currentCompany) {
+        faturas = faturas.filter((f) => f.companyId === currentCompany.id);
+      }
+    }
+
+    return faturas.sort(
+      (a, b) =>
+        new Date(a.dataVencimento).getTime() -
+        new Date(b.dataVencimento).getTime()
+    );
+  }
+
+  async findByStatus(
+    status: Fatura["status"],
+    companyId?: string
+  ): Promise<Fatura[]> {
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    let faturas = this.getFaturasFromStorage();
+
+    faturas = faturas.filter((f) => f.status === status);
+
+    if (companyId) {
+      faturas = faturas.filter((f) => f.companyId === companyId);
+    } else {
+      const currentCompany = await authService.getCurrentCompany();
+      if (currentCompany) {
+        faturas = faturas.filter((f) => f.companyId === currentCompany.id);
+      }
+    }
+
+    return faturas.sort(
+      (a, b) =>
+        new Date(a.dataVencimento).getTime() -
+        new Date(b.dataVencimento).getTime()
+    );
+  }
+
+  // Geração em lote
+  async generateBatch(
+    dados: Array<{
+      projetoId: string;
+      userId: string;
+      periodoInicio: string;
+      periodoFim: string;
+      dataVencimento: string;
+      titulo?: string;
+    }>
+  ): Promise<Fatura[]> {
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    const faturasGeradas: Fatura[] = [];
+
+    for (const dado of dados) {
+      const projeto = await projetoService.findById(dado.projetoId);
+      if (!projeto) {
+        console.warn(`Projeto ${dado.projetoId} não encontrado, pulando...`);
+        continue;
+      }
+
+      // Calcular horas trabalhadas
+      const periodoInicio = parseISO(dado.periodoInicio);
+      const periodoFim = parseISO(dado.periodoFim);
+      const atuacoes = await atuacaoService.findAll(projeto.companyId);
+      const atuacoesDoPeriodo = atuacoes.filter((a) => {
+        if (a.projetoId !== dado.projetoId || a.userId !== dado.userId)
+          return false;
+        const dataAtuacao = parseISO(a.data);
+        return isWithinInterval(dataAtuacao, {
+          start: startOfDay(periodoInicio),
+          end: endOfDay(periodoFim),
+        });
+      });
+      const horasTrabalhadas = atuacoesDoPeriodo.reduce(
+        (total, a) => total + (a.horasUtilizadas || 0),
+        0
+      );
+
+      // Determinar tipo de cálculo
+      const settings = await userCompanySettingsService.findByUserAndCompany(
+        dado.userId,
+        projeto.companyId
+      );
+      const tipoCalculo: "horas" | "fixo" =
+        settings?.horista || projeto.tipoCobranca === "horas"
+          ? "horas"
+          : "fixo";
+
+      let valor: number;
+      let valorPorHora: number | undefined;
+
+      if (tipoCalculo === "horas") {
+        valorPorHora = projeto.valorHora || 0;
+        valor = horasTrabalhadas * valorPorHora;
+      } else {
+        valor = projeto.valorFixo || 0;
+      }
+
+      const faturaId = `fat_${Date.now()}_${Math.random()
+        .toString(36)
+        .substr(2, 9)}_${dados.indexOf(dado)}`;
+
+      const novaFatura: Fatura = {
+        id: faturaId,
+        companyId: projeto.companyId,
+        projetoId: dado.projetoId,
+        userId: dado.userId,
+        titulo: dado.titulo || `Fatura - ${projeto.titulo}`,
+        valor: valor,
+        dataVencimento: dado.dataVencimento,
+        observacoes: undefined,
+        status: "pendente",
+        cobrancaEnviada: false,
+        notaFiscalEmitida: false,
+        comprovanteEnviado: false,
+        lembretes: [
+          {
+            id: `lemb_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            faturaId: faturaId,
+            titulo: "Receber pagamento",
+            data: dado.dataVencimento,
+            concluido: false,
+          },
+        ],
+        periodoInicio: dado.periodoInicio,
+        periodoFim: dado.periodoFim,
+        horasTrabalhadas: horasTrabalhadas,
+        tipoCalculo: tipoCalculo,
+        valorPorHora: valorPorHora,
+        aprovada: false,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      faturasGeradas.push(novaFatura);
+
+      // Criar status de etapas automaticamente
+      const etapasAtivas = await faturaEtapaService.findAtivasByCompanyId(
+        projeto.companyId
+      );
+      for (const etapa of etapasAtivas) {
+        await faturaEtapaStatusService.create({
+          faturaId: faturaId,
+          etapaId: etapa.id,
+          status: "pendente",
+        });
+      }
+    }
+
+    // Salvar todas as faturas
+    const faturas = this.getFaturasFromStorage();
+    faturas.push(...faturasGeradas);
+    this.saveFaturasToStorage(faturas);
+
+    return faturasGeradas;
   }
 }
 

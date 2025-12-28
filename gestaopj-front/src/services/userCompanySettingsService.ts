@@ -77,6 +77,8 @@ class UserCompanySettingsService {
       companyId: data.companyId,
       horista: data.horista,
       limiteMensalHoras: data.horista ? data.limiteMensalHoras : undefined,
+      valorHora: data.horista ? data.valorHora : undefined,
+      valorFixo: !data.horista ? data.valorFixo : undefined,
       contato: data.contato,
       cpf: data.cpf,
       createdAt: now,
@@ -102,9 +104,14 @@ class UserCompanySettingsService {
       throw new Error("Configuração não encontrada");
     }
 
-    // Se mudou para não-horista, remover limite mensal
+    // Se mudou para não-horista, remover limite mensal e valorHora
     if (data.horista === false) {
       data.limiteMensalHoras = undefined;
+      data.valorHora = undefined;
+    }
+    // Se mudou para horista, remover valorFixo
+    if (data.horista === true) {
+      data.valorFixo = undefined;
     }
 
     settings[index] = {

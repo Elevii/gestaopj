@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
@@ -31,18 +31,16 @@ export default function EmpresaDetalhesPage() {
   const params = useParams();
   const companyId = params.id as string;
   const { user: currentUser, refreshAuth, userCompanies } = useAuth();
-  const { company: currentCompany } = useCompany();
+  const { company: currentCompany, updateCompany } = useCompany();
   const { canManageUsers, canChangeUserRoles, canRemoveUsers, canInviteUsers, canViewCompanyDetails } =
     usePermissions();
 
-  // Verificar acesso - membros não podem acessar
-  useEffect(() => {
-    if (!currentCompany) return;
+  // Membros podem acessar, mas apenas visualizar (sem opções de edição)
+  const isOwnerOrAdmin = useMemo(() => {
+    if (!currentCompany) return false;
     const membership = userCompanies.find((m) => m.companyId === currentCompany.id);
-    if (membership?.role === "member") {
-      router.push("/dashboard");
-    }
-  }, [currentCompany, userCompanies, router]);
+    return membership?.role === "owner" || membership?.role === "admin";
+  }, [currentCompany, userCompanies]);
 
   const [company, setCompany] = useState<Company | null>(null);
   const [members, setMembers] = useState<MemberWithUser[]>([]);
@@ -66,10 +64,20 @@ export default function EmpresaDetalhesPage() {
   const [memberForm, setMemberForm] = useState({
     horista: false,
     limiteMensalHoras: "",
+    valorHora: "",
+    valorFixo: "",
     contato: "",
     cpf: "",
   });
   const [memberLoading, setMemberLoading] = useState(false);
+
+  // Estados para edição de empresa
+  const [showEditCompanyModal, setShowEditCompanyModal] = useState(false);
+  const [companyForm, setCompanyForm] = useState({
+    diaInicioFaturamento: "",
+    diaFimFaturamento: "",
+  });
+  const [companyFormLoading, setCompanyFormLoading] = useState(false);
 
   useEffect(() => {
     const loadData = async () => {
@@ -239,11 +247,26 @@ export default function EmpresaDetalhesPage() {
           ? parseFloat(memberForm.limiteMensalHoras)
           : undefined;
 
+      // Parsear valores monetários
+      const parseCurrency = (value: string): number => {
+        if (!value || value.trim() === "") return 0;
+        return parseFloat(value.replace(/\./g, "").replace(",", "."));
+      };
+
+      const valorHora = memberForm.horista && memberForm.valorHora 
+        ? parseCurrency(memberForm.valorHora) 
+        : undefined;
+      const valorFixo = !memberForm.horista && memberForm.valorFixo 
+        ? parseCurrency(memberForm.valorFixo) 
+        : undefined;
+
       if (selectedMember.settings) {
         // Atualizar configuração existente
         await userCompanySettingsService.update(selectedMember.settings.id, {
           horista: memberForm.horista,
           limiteMensalHoras: memberForm.horista ? limiteMensalHoras : undefined,
+          valorHora: valorHora,
+          valorFixo: valorFixo,
           contato: memberForm.contato || undefined,
           cpf: memberForm.cpf || undefined,
         });
@@ -254,6 +277,8 @@ export default function EmpresaDetalhesPage() {
           companyId: company.id,
           horista: memberForm.horista,
           limiteMensalHoras: memberForm.horista ? limiteMensalHoras : undefined,
+          valorHora: valorHora,
+          valorFixo: valorFixo,
           contato: memberForm.contato || undefined,
           cpf: memberForm.cpf || undefined,
         });
@@ -265,6 +290,8 @@ export default function EmpresaDetalhesPage() {
       setMemberForm({
         horista: false,
         limiteMensalHoras: "",
+        valorHora: "",
+        valorFixo: "",
         contato: "",
         cpf: "",
       });
@@ -276,11 +303,33 @@ export default function EmpresaDetalhesPage() {
     }
   };
 
+  const formatCurrency = (value: number | undefined): string => {
+    if (!value || value === 0) return "";
+    return new Intl.NumberFormat("pt-BR", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(value);
+  };
+
+  const formatCurrencyInput = (value: string): string => {
+    // Remove tudo que não é dígito
+    const digits = value.replace(/\D/g, "");
+    // Converte para número e divide por 100 para ter os centavos
+    const number = parseInt(digits, 10) / 100;
+    // Formata como moeda brasileira
+    return new Intl.NumberFormat("pt-BR", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(number);
+  };
+
   const openEditMemberModal = (member: MemberWithUser) => {
     setSelectedMember(member);
     setMemberForm({
       horista: member.settings?.horista || false,
       limiteMensalHoras: member.settings?.limiteMensalHoras?.toString() || "",
+      valorHora: formatCurrency(member.settings?.valorHora),
+      valorFixo: formatCurrency(member.settings?.valorFixo),
       contato: member.settings?.contato || "",
       cpf: member.settings?.cpf || "",
     });
@@ -310,6 +359,66 @@ export default function EmpresaDetalhesPage() {
   const currentMembership = members.find(
     (m) => m.userId === currentUser?.id
   );
+
+  // Carregar dados da empresa no formulário
+  useEffect(() => {
+    if (company) {
+      setCompanyForm({
+        diaInicioFaturamento: company.diaInicioFaturamento?.toString() || "",
+        diaFimFaturamento: company.diaFimFaturamento?.toString() || "",
+      });
+    }
+  }, [company]);
+
+  const handleOpenEditCompany = () => {
+    if (company) {
+      setCompanyForm({
+        diaInicioFaturamento: company.diaInicioFaturamento?.toString() || "",
+        diaFimFaturamento: company.diaFimFaturamento?.toString() || "",
+      });
+      setShowEditCompanyModal(true);
+    }
+  };
+
+  const handleSaveCompany = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!company) return;
+
+    // Validação
+    const diaInicio = companyForm.diaInicioFaturamento ? parseInt(companyForm.diaInicioFaturamento) : undefined;
+    const diaFim = companyForm.diaFimFaturamento ? parseInt(companyForm.diaFimFaturamento) : undefined;
+
+    if (diaInicio && (diaInicio < 1 || diaInicio > 31)) {
+      alert("Dia de início deve ser entre 1 e 31");
+      return;
+    }
+
+    if (diaFim && (diaFim < 1 || diaFim > 31)) {
+      alert("Dia de fim deve ser entre 1 e 31");
+      return;
+    }
+
+    setCompanyFormLoading(true);
+    try {
+      await updateCompany(company.id, {
+        diaInicioFaturamento: diaInicio,
+        diaFimFaturamento: diaFim,
+      });
+      
+      // Recarregar dados da empresa
+      const updatedCompany = await companyService.findById(company.id);
+      if (updatedCompany) {
+        setCompany(updatedCompany);
+      }
+      
+      setShowEditCompanyModal(false);
+      alert("Período de faturamento atualizado com sucesso!");
+    } catch (error: any) {
+      alert(error.message || "Erro ao salvar período de faturamento");
+    } finally {
+      setCompanyFormLoading(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -394,9 +503,19 @@ export default function EmpresaDetalhesPage() {
 
       {/* Informações básicas da empresa */}
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-        <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
-          Informações da Empresa
-        </h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+            Informações da Empresa
+          </h2>
+          {isOwnerOrAdmin && (
+            <button
+              onClick={handleOpenEditCompany}
+              className="px-3 py-1.5 text-sm font-medium text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300"
+            >
+              Editar Período de Faturamento
+            </button>
+          )}
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -434,6 +553,16 @@ export default function EmpresaDetalhesPage() {
                 Endereço
               </label>
               <p className="text-gray-900 dark:text-white">{company.address}</p>
+            </div>
+          )}
+          {(company.diaInicioFaturamento || company.diaFimFaturamento) && (
+            <div className="md:col-span-2 pt-4 border-t border-gray-200 dark:border-gray-700">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Período de Faturamento
+              </label>
+              <p className="text-gray-900 dark:text-white">
+                Do dia {company.diaInicioFaturamento || "-"} ao dia {company.diaFimFaturamento || "-"} de cada mês
+              </p>
             </div>
           )}
         </div>
@@ -754,6 +883,9 @@ export default function EmpresaDetalhesPage() {
                             ...memberForm,
                             horista: e.target.checked,
                             limiteMensalHoras: e.target.checked ? memberForm.limiteMensalHoras : "",
+                            // Limpar campos quando mudar o tipo
+                            valorHora: e.target.checked ? memberForm.valorHora : "",
+                            valorFixo: !e.target.checked ? memberForm.valorFixo : "",
                           });
                         }}
                         className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
@@ -768,25 +900,72 @@ export default function EmpresaDetalhesPage() {
                   </div>
 
                   {memberForm.horista && (
+                    <>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                          Limite Mensal de Horas <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          required={memberForm.horista}
+                          value={memberForm.limiteMensalHoras}
+                          onChange={(e) =>
+                            setMemberForm({
+                              ...memberForm,
+                              limiteMensalHoras: e.target.value,
+                            })
+                          }
+                          className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors dark:bg-gray-700 dark:text-white"
+                          placeholder="Ex: 160.00"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                          Valor por Hora (R$)
+                        </label>
+                        <input
+                          type="text"
+                          value={memberForm.valorHora}
+                          onChange={(e) => {
+                            const formatted = formatCurrencyInput(e.target.value);
+                            setMemberForm({
+                              ...memberForm,
+                              valorHora: formatted,
+                            });
+                          }}
+                          className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors dark:bg-gray-700 dark:text-white"
+                          placeholder="0,00"
+                        />
+                        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                          Valor que será usado para calcular o pagamento baseado nas horas trabalhadas
+                        </p>
+                      </div>
+                    </>
+                  )}
+
+                  {!memberForm.horista && (
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        Limite Mensal de Horas <span className="text-red-500">*</span>
+                        Valor Fixo Mensal (R$)
                       </label>
                       <input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        required={memberForm.horista}
-                        value={memberForm.limiteMensalHoras}
-                        onChange={(e) =>
+                        type="text"
+                        value={memberForm.valorFixo}
+                        onChange={(e) => {
+                          const formatted = formatCurrencyInput(e.target.value);
                           setMemberForm({
                             ...memberForm,
-                            limiteMensalHoras: e.target.value,
-                          })
-                        }
+                            valorFixo: formatted,
+                          });
+                        }}
                         className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors dark:bg-gray-700 dark:text-white"
-                        placeholder="Ex: 160.00"
+                        placeholder="0,00"
                       />
+                      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                        Valor fixo que será pago mensalmente
+                      </p>
                     </div>
                   )}
 
@@ -831,6 +1010,8 @@ export default function EmpresaDetalhesPage() {
                     setMemberForm({
                       horista: false,
                       limiteMensalHoras: "",
+                      valorHora: "",
+                      valorFixo: "",
                       contato: "",
                       cpf: "",
                     });
@@ -845,6 +1026,81 @@ export default function EmpresaDetalhesPage() {
                   className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {memberLoading ? "Salvando..." : "Salvar Configurações"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Edição de Período de Faturamento */}
+      {showEditCompanyModal && isOwnerOrAdmin && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl p-6 max-w-md w-full mx-4">
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
+              Editar Período de Faturamento
+            </h2>
+            <form onSubmit={handleSaveCompany}>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Dia de Início do Período (1-31)
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="31"
+                    value={companyForm.diaInicioFaturamento}
+                    onChange={(e) =>
+                      setCompanyForm({
+                        ...companyForm,
+                        diaInicioFaturamento: e.target.value,
+                      })
+                    }
+                    className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors dark:bg-gray-700 dark:text-white"
+                    placeholder="Ex: 26"
+                  />
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    Dia do mês em que o período de faturamento começa (ex: 26 = do dia 26 até o dia 25 do mês seguinte)
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Dia de Fim do Período (1-31)
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="31"
+                    value={companyForm.diaFimFaturamento}
+                    onChange={(e) =>
+                      setCompanyForm({
+                        ...companyForm,
+                        diaFimFaturamento: e.target.value,
+                      })
+                    }
+                    className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors dark:bg-gray-700 dark:text-white"
+                    placeholder="Ex: 25"
+                  />
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    Dia do mês em que o período de faturamento termina
+                  </p>
+                </div>
+              </div>
+              <div className="flex justify-end gap-3 mt-6">
+                <button
+                  type="button"
+                  onClick={() => setShowEditCompanyModal(false)}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={companyFormLoading}
+                  className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {companyFormLoading ? "Salvando..." : "Salvar"}
                 </button>
               </div>
             </form>

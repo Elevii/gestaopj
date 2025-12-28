@@ -4,6 +4,8 @@ export interface UserCompanySettings {
   companyId: string;
   horista: boolean; // Se é horista ou não
   limiteMensalHoras?: number; // Limite mensal de horas (null se horista)
+  valorHora?: number; // Valor por hora (se horista)
+  valorFixo?: number; // Valor fixo mensal (se não horista)
   contato?: string; // Telefone ou outro contato
   cpf?: string; // CPF do membro
   createdAt: string;
@@ -15,6 +17,8 @@ export interface CreateUserCompanySettingsDTO {
   companyId: string;
   horista: boolean;
   limiteMensalHoras?: number;
+  valorHora?: number;
+  valorFixo?: number;
   contato?: string;
   cpf?: string;
 }
@@ -22,6 +26,8 @@ export interface CreateUserCompanySettingsDTO {
 export interface UpdateUserCompanySettingsDTO {
   horista?: boolean;
   limiteMensalHoras?: number;
+  valorHora?: number;
+  valorFixo?: number;
   contato?: string;
   cpf?: string;
 }

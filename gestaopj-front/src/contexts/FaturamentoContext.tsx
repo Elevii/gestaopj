@@ -20,12 +20,15 @@ interface FaturamentoContextType {
     aReceber: number;
     atrasado: number;
   };
-  refreshFaturas: () => Promise<void>;
+  refreshFaturas: (userId?: string) => Promise<void>;
   createFatura: (data: CreateFaturaDTO) => Promise<Fatura[]>;
   updateFatura: (id: string, data: UpdateFaturaDTO) => Promise<Fatura>;
   deleteFatura: (id: string) => Promise<void>;
   deleteFaturas: (ids: string[]) => Promise<void>;
   getFaturaById: (id: string) => Fatura | undefined;
+  getFaturasByUserId: (userId: string) => Promise<Fatura[]>;
+  getFaturasByPeriodo: (periodoInicio: string, periodoFim: string) => Promise<Fatura[]>;
+  getFaturasByStatus: (status: Fatura["status"]) => Promise<Fatura[]>;
 }
 
 const FaturamentoContext = createContext<FaturamentoContextType | undefined>(undefined);
@@ -40,11 +43,18 @@ export function FaturamentoProvider({ children }: { children: ReactNode }) {
     atrasado: 0,
   });
 
-  const refreshFaturas = useCallback(async () => {
+  const refreshFaturas = useCallback(async (userId?: string) => {
     try {
       setLoading(true);
       const companyId = company?.id;
-      const all = await faturaService.findAll(companyId);
+      let all: Fatura[];
+      
+      if (userId) {
+        all = await faturaService.findByUserId(userId, companyId);
+      } else {
+        all = await faturaService.findAll(companyId);
+      }
+      
       const res = await faturaService.getResumoFinanceiro(companyId);
       setFaturas(all);
       setResumo(res);
@@ -90,6 +100,30 @@ export function FaturamentoProvider({ children }: { children: ReactNode }) {
     [faturas]
   );
 
+  const getFaturasByUserId = useCallback(
+    async (userId: string): Promise<Fatura[]> => {
+      const companyId = company?.id;
+      return await faturaService.findByUserId(userId, companyId);
+    },
+    [company?.id]
+  );
+
+  const getFaturasByPeriodo = useCallback(
+    async (periodoInicio: string, periodoFim: string): Promise<Fatura[]> => {
+      const companyId = company?.id;
+      return await faturaService.findByPeriodo(periodoInicio, periodoFim, companyId);
+    },
+    [company?.id]
+  );
+
+  const getFaturasByStatus = useCallback(
+    async (status: Fatura["status"]): Promise<Fatura[]> => {
+      const companyId = company?.id;
+      return await faturaService.findByStatus(status, companyId);
+    },
+    [company?.id]
+  );
+
   return (
     <FaturamentoContext.Provider
       value={{
@@ -102,6 +136,9 @@ export function FaturamentoProvider({ children }: { children: ReactNode }) {
         deleteFatura,
         deleteFaturas,
         getFaturaById,
+        getFaturasByUserId,
+        getFaturasByPeriodo,
+        getFaturasByStatus,
       }}
     >
       {children}

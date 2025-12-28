@@ -30,14 +30,7 @@ export default function EmpresasPage() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"empresas" | "convites">("empresas");
 
-  // Verificar acesso - membros não podem acessar
-  useEffect(() => {
-    if (!currentCompany) return;
-    const membership = userCompanies.find((m) => m.companyId === currentCompany.id);
-    if (membership?.role === "member") {
-      router.push("/dashboard");
-    }
-  }, [currentCompany, userCompanies, router]);
+  // Membros podem acessar, mas apenas visualizar (sem opções de edição)
 
   useEffect(() => {
     const loadData = async () => {

@@ -5,26 +5,51 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useProjetos } from "@/contexts/ProjetoContext";
 import { useFaturamento } from "@/contexts/FaturamentoContext";
+import { useFaturaPermissions } from "@/hooks/useFaturaPermissions";
+import { useAuth } from "@/contexts/AuthContext";
+import { useCompany } from "@/contexts/CompanyContext";
 import { formatTodayISODateLocal } from "@/utils/estimativas";
 import { CreateLembreteDTO, FrequenciaRecorrencia } from "@/types";
-import { addDays, addMonths, addWeeks, addYears, format, parseISO } from "date-fns";
+import { addDays, addMonths, addWeeks, addYears, format, parseISO, subMonths, startOfMonth, endOfMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useFormatDate } from "@/hooks/useFormatDate";
+import { companyMembershipService } from "@/services/companyMembershipService";
+import { userService } from "@/services/userService";
+import { atuacaoService } from "@/services/atuacaoService";
+import { userCompanySettingsService } from "@/services/userCompanySettingsService";
 
 export default function NovaFaturaPage() {
   const router = useRouter();
   const { projetos } = useProjetos();
   const { createFatura, faturas } = useFaturamento();
   const { formatDate } = useFormatDate();
+  const { canGenerateInvoices } = useFaturaPermissions();
+  const { user } = useAuth();
+  const { company } = useCompany();
 
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<Partial<Record<string, string>>>({});
 
+  // Estados para membros e cálculo
+  const [availableMembers, setAvailableMembers] = useState<Array<{ id: string; name: string; email: string }>>([]);
+  const [loadingMembers, setLoadingMembers] = useState(true);
+  const [calculatedHours, setCalculatedHours] = useState<number | null>(null);
+  const [calculatedValue, setCalculatedValue] = useState<number | null>(null);
+  const [calculationType, setCalculationType] = useState<"horas" | "fixo" | null>(null);
+
+  // Período padrão: mês anterior
+  const lastMonth = subMonths(new Date(), 1);
+  const defaultPeriodStart = format(startOfMonth(lastMonth), "yyyy-MM-dd");
+  const defaultPeriodEnd = format(endOfMonth(lastMonth), "yyyy-MM-dd");
+
   const [formData, setFormData] = useState({
     projetoId: "",
+    userId: "",
     titulo: "",
     valor: "",
     dataVencimento: formatTodayISODateLocal(),
+    periodoInicio: defaultPeriodStart,
+    periodoFim: defaultPeriodEnd,
     observacoes: "",
   });
 
@@ -54,12 +79,109 @@ export default function NovaFaturaPage() {
 
   const [suggestedValue, setSuggestedValue] = useState<number | null>(null);
 
+  // Carregar membros da empresa
+  useEffect(() => {
+    const loadMembers = async () => {
+      if (!company) {
+        setLoadingMembers(false);
+        return;
+      }
+
+      try {
+        setLoadingMembers(true);
+        const memberships = await companyMembershipService.findByCompanyId(company.id);
+        const membersData = await Promise.all(
+          memberships.map(async (membership) => {
+            const userData = await userService.findById(membership.userId);
+            return userData ? { id: userData.id, name: userData.name, email: userData.email } : null;
+          })
+        );
+        setAvailableMembers(membersData.filter((m): m is { id: string; name: string; email: string } => m !== null));
+      } catch (error) {
+        console.error("Erro ao carregar membros:", error);
+      } finally {
+        setLoadingMembers(false);
+      }
+    };
+
+    loadMembers();
+  }, [company]);
+
+  // Pre-selecionar usuário atual se for membro
+  useEffect(() => {
+    if (!canGenerateInvoices && user && availableMembers.length > 0) {
+      const isMember = availableMembers.find(m => m.id === user.id);
+      if (isMember && !formData.userId) {
+        setFormData((prev) => ({ ...prev, userId: user.id }));
+      }
+    }
+  }, [canGenerateInvoices, user, availableMembers, formData.userId]);
+
   useEffect(() => {
     // Pre-seleciona primeiro projeto
     if (!formData.projetoId && projetos.length > 0) {
       setFormData((prev) => ({ ...prev, projetoId: projetos[0].id }));
     }
   }, [formData.projetoId, projetos]);
+
+  // Calcular horas e valor automaticamente
+  useEffect(() => {
+    const calculateHoursAndValue = async () => {
+      if (!formData.projetoId || !formData.userId || !formData.periodoInicio || !formData.periodoFim) {
+        setCalculatedHours(null);
+        setCalculatedValue(null);
+        setCalculationType(null);
+        return;
+      }
+
+      try {
+        const projeto = projetos.find((p) => p.id === formData.projetoId);
+        if (!projeto) return;
+
+        // Calcular horas trabalhadas
+        const atuacoes = await atuacaoService.findAll(projeto.companyId);
+        const periodoInicio = parseISO(formData.periodoInicio);
+        const periodoFim = parseISO(formData.periodoFim);
+        
+        const atuacoesDoPeriodo = atuacoes.filter((a) => {
+          if (a.projetoId !== formData.projetoId || a.userId !== formData.userId) return false;
+          const dataAtuacao = parseISO(a.data);
+          return dataAtuacao >= periodoInicio && dataAtuacao <= periodoFim;
+        });
+
+        const horas = atuacoesDoPeriodo.reduce((total, a) => total + (a.horasUtilizadas || 0), 0);
+        setCalculatedHours(horas);
+
+        // Determinar tipo de cálculo
+        const settings = await userCompanySettingsService.findByUserAndCompany(
+          formData.userId,
+          projeto.companyId
+        );
+
+        const tipoCalculo: "horas" | "fixo" = settings?.horista || projeto.tipoCobranca === "horas" ? "horas" : "fixo";
+        setCalculationType(tipoCalculo);
+
+        let valor: number;
+        if (tipoCalculo === "horas") {
+          const valorPorHora = projeto.valorHora || 0;
+          valor = horas * valorPorHora;
+        } else {
+          valor = projeto.valorFixo || 0;
+        }
+
+        setCalculatedValue(valor);
+        
+        // Atualizar valor no formulário se não foi preenchido manualmente
+        if (!formData.valor || parseFloat(formData.valor) === 0) {
+          setFormData((prev) => ({ ...prev, valor: valor.toString() }));
+        }
+      } catch (error) {
+        console.error("Erro ao calcular horas/valor:", error);
+      }
+    };
+
+    calculateHoursAndValue();
+  }, [formData.projetoId, formData.userId, formData.periodoInicio, formData.periodoFim, projetos]);
 
   useEffect(() => {
     if (!formData.projetoId) return;
@@ -134,9 +256,20 @@ export default function NovaFaturaPage() {
 
     const nextErrors: Partial<Record<string, string>> = {};
     if (!formData.projetoId) nextErrors.projetoId = "Projeto é obrigatório";
+    if (!formData.userId) nextErrors.userId = "Usuário é obrigatório";
     if (!formData.titulo) nextErrors.titulo = "Título é obrigatório";
     if (!formData.dataVencimento)
       nextErrors.dataVencimento = "Data de vencimento é obrigatória";
+    if (!formData.periodoInicio) nextErrors.periodoInicio = "Período de início é obrigatório";
+    if (!formData.periodoFim) nextErrors.periodoFim = "Período de fim é obrigatório";
+
+    if (formData.periodoInicio && formData.periodoFim) {
+      const inicio = parseISO(formData.periodoInicio);
+      const fim = parseISO(formData.periodoFim);
+      if (inicio > fim) {
+        nextErrors.periodoFim = "Data de fim deve ser posterior à data de início";
+      }
+    }
 
     const valorNum = parseFloat(formData.valor);
     if (!formData.valor) {
@@ -154,15 +287,19 @@ export default function NovaFaturaPage() {
     try {
       await createFatura({
         projetoId: formData.projetoId,
+        userId: formData.userId,
         titulo: formData.titulo,
         valor: valorNum,
         dataVencimento: formData.dataVencimento,
+        periodoInicio: formData.periodoInicio,
+        periodoFim: formData.periodoFim,
+        horasTrabalhadas: calculatedHours || undefined,
         observacoes: formData.observacoes.trim() || undefined,
         recorrencia: usarRecorrencia ? recorrencia : undefined,
         lembretesIniciais: lembretes, // Sempre envia lembretes se houver
       });
 
-      router.push("/dashboard/financeiro");
+      router.push("/dashboard/gestao-financeira");
     } catch (error) {
       console.error("Erro ao criar fatura:", error);
       setErrors({ submit: "Erro ao criar fatura. Tente novamente." });
@@ -206,7 +343,7 @@ export default function NovaFaturaPage() {
     <div className="space-y-6">
       <div>
         <Link
-          href="/dashboard/financeiro"
+          href="/dashboard/gestao-financeira"
           className="text-sm text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200 mb-2 inline-flex items-center"
         >
           <svg
@@ -266,7 +403,7 @@ export default function NovaFaturaPage() {
                 <option value="">Selecione um projeto</option>
                 {projetos.map((p) => (
                   <option key={p.id} value={p.id}>
-                    {p.empresa} - {p.titulo}
+                    {p.titulo}
                   </option>
                 ))}
               </select>
@@ -277,6 +414,121 @@ export default function NovaFaturaPage() {
               )}
             </div>
 
+            <div>
+              <label
+                htmlFor="userId"
+                className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+              >
+                Usuário <span className="text-red-500">*</span>
+              </label>
+              <select
+                id="userId"
+                name="userId"
+                value={formData.userId}
+                onChange={(e) => {
+                  setFormData((prev) => ({
+                    ...prev,
+                    userId: e.target.value,
+                    valor: "",
+                  }));
+                }}
+                disabled={loadingMembers || !canGenerateInvoices}
+                className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors dark:bg-gray-700 dark:border-gray-600 dark:text-white ${
+                  errors.userId ? "border-red-500" : "border-gray-300"
+                } ${loadingMembers || !canGenerateInvoices ? "opacity-50 cursor-not-allowed" : ""}`}
+              >
+                <option value="">Selecione um usuário</option>
+                {availableMembers.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name} ({m.email})
+                  </option>
+                ))}
+              </select>
+              {errors.userId && (
+                <p className="mt-1 text-sm text-red-600 dark:text-red-400">
+                  {errors.userId}
+                </p>
+              )}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label
+                htmlFor="periodoInicio"
+                className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+              >
+                Período de Início <span className="text-red-500">*</span>
+              </label>
+              <input
+                id="periodoInicio"
+                name="periodoInicio"
+                type="date"
+                value={formData.periodoInicio}
+                onChange={handleChange}
+                className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors dark:bg-gray-700 dark:border-gray-600 dark:text-white ${
+                  errors.periodoInicio ? "border-red-500" : "border-gray-300"
+                }`}
+              />
+              {errors.periodoInicio && (
+                <p className="mt-1 text-sm text-red-600 dark:text-red-400">
+                  {errors.periodoInicio}
+                </p>
+              )}
+            </div>
+
+            <div>
+              <label
+                htmlFor="periodoFim"
+                className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+              >
+                Período de Fim <span className="text-red-500">*</span>
+              </label>
+              <input
+                id="periodoFim"
+                name="periodoFim"
+                type="date"
+                value={formData.periodoFim}
+                onChange={handleChange}
+                className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors dark:bg-gray-700 dark:border-gray-600 dark:text-white ${
+                  errors.periodoFim ? "border-red-500" : "border-gray-300"
+                }`}
+              />
+              {errors.periodoFim && (
+                <p className="mt-1 text-sm text-red-600 dark:text-red-400">
+                  {errors.periodoFim}
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Preview do cálculo */}
+          {(calculatedHours !== null || calculatedValue !== null) && (
+            <div className="bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 rounded-lg p-4">
+              <h4 className="text-sm font-semibold text-indigo-900 dark:text-indigo-200 mb-2">
+                Cálculo Automático
+              </h4>
+              <div className="space-y-1 text-sm">
+                {calculatedHours !== null && (
+                  <p className="text-indigo-700 dark:text-indigo-300">
+                    Horas trabalhadas no período: <strong>{calculatedHours.toFixed(2)}h</strong>
+                  </p>
+                )}
+                {calculationType && (
+                  <p className="text-indigo-700 dark:text-indigo-300">
+                    Tipo de cálculo: <strong>{calculationType === "horas" ? "Por horas" : "Valor fixo"}</strong>
+                  </p>
+                )}
+                {calculatedValue !== null && (
+                  <p className="text-indigo-700 dark:text-indigo-300">
+                    Valor calculado: <strong>{formatCurrency(calculatedValue)}</strong>
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label
                 htmlFor="titulo"
@@ -605,7 +857,7 @@ export default function NovaFaturaPage() {
 
           <div className="flex items-center justify-end space-x-4 pt-4 border-t border-gray-200 dark:border-gray-700">
             <Link
-              href="/dashboard/financeiro"
+              href="/dashboard/gestao-financeira"
               className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-600 transition-colors"
             >
               Cancelar
