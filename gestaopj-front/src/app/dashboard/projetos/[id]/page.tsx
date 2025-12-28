@@ -1,0 +1,640 @@
+"use client";
+
+import { useState } from "react";
+import Link from "next/link";
+import { useParams, useRouter } from "next/navigation";
+import { useProjetos } from "@/contexts/ProjetoContext";
+import { useAtividades } from "@/contexts/AtividadeContext";
+import { useFaturamento } from "@/contexts/FaturamentoContext";
+import { useConfiguracoes } from "@/contexts/ConfiguracoesContext";
+import { Atividade } from "@/types";
+import { useFormatDate } from "@/hooks/useFormatDate";
+
+export default function ProjetoDetalhesPage() {
+  const params = useParams();
+  const router = useRouter();
+  const projetoId = params.id as string;
+  const { getProjetoById, deleteProjeto } = useProjetos();
+  const { atividades, loading, deleteAtividade } = useAtividades();
+  const { faturas, updateFatura } = useFaturamento();
+  const { configuracoes } = useConfiguracoes();
+  const { formatDate } = useFormatDate();
+
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [activityToDelete, setActivityToDelete] = useState<string | null>(null);
+  const [isDeletingActivity, setIsDeletingActivity] = useState(false);
+  
+  const [activeTab, setActiveTab] = useState<'atividades' | 'financeiro'>('atividades');
+
+  const projeto = getProjetoById(projetoId);
+
+  if (!projeto) {
+    return (
+      <div>
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-12 text-center">
+          <p className="text-gray-600 dark:text-gray-400">
+            Projeto não encontrado
+          </p>
+          <Link
+            href="/dashboard/projetos"
+            className="mt-4 inline-block text-indigo-600 hover:text-indigo-700 dark:text-indigo-400"
+          >
+            Voltar para projetos
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat("pt-BR", {
+      style: "currency",
+      currency: "BRL",
+    }).format(value);
+  };
+
+  const handleDeleteProjeto = async () => {
+    setIsDeleting(true);
+    try {
+      // Excluir todas as atividades do projeto primeiro
+      const atividadesParaExcluir = atividadesDoProjeto.map((a) => a.id);
+      for (const atividadeId of atividadesParaExcluir) {
+        await deleteAtividade(atividadeId);
+      }
+      // Depois excluir o projeto
+      await deleteProjeto(projetoId);
+      router.push("/dashboard/projetos");
+    } catch (error) {
+      console.error("Erro ao excluir projeto:", error);
+      setIsDeleting(false);
+    }
+  };
+
+  const handleDeleteAtividade = async (atividadeId: string) => {
+    setIsDeletingActivity(true);
+    try {
+      await deleteAtividade(atividadeId);
+      setActivityToDelete(null);
+    } catch (error) {
+      console.error("Erro ao excluir atividade:", error);
+    } finally {
+      setIsDeletingActivity(false);
+    }
+  };
+
+  const atividadesDoProjeto = atividades.filter(
+    (a) => a.projetoId === projetoId
+  );
+  
+  const faturasDoProjeto = faturas.filter(
+    (f) => f.projetoId === projetoId
+  ).sort((a, b) => new Date(a.dataVencimento).getTime() - new Date(b.dataVencimento).getTime());
+
+  const totalHorasEstimadas = atividadesDoProjeto.reduce(
+    (sum, atividade) => sum + atividade.horasAtuacao,
+    0
+  );
+  const totalHorasUtilizadas = atividadesDoProjeto.reduce(
+    (sum, atividade) => sum + (atividade.horasUtilizadas || 0),
+    0
+  );
+  const totalCusto = atividadesDoProjeto.reduce((sum, atividade) => {
+    return sum + atividade.custoTarefa;
+  }, 0);
+  
+  const lucroAtualEstimado = 
+    projeto.tipoCobranca === "fixo"
+      ? (projeto.valorFixo ?? 0)
+      : totalHorasUtilizadas * (projeto.valorHora ?? 0);
+
+  // Cálculos financeiros
+  const totalFaturado = faturasDoProjeto.reduce((acc, f) => acc + f.valor, 0);
+  const totalRecebido = faturasDoProjeto
+    .filter(f => f.status === 'pago')
+    .reduce((acc, f) => acc + f.valor, 0);
+  const totalPendente = faturasDoProjeto
+    .filter(f => f.status === 'pendente' || f.status === 'atrasado')
+    .reduce((acc, f) => acc + f.valor, 0);
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <Link
+            href="/dashboard/projetos"
+            className="text-sm text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200 mb-2 inline-flex items-center"
+          >
+            <svg
+              className="w-4 h-4 mr-1"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M15 19l-7-7 7-7"
+              />
+            </svg>
+            Voltar para projetos
+          </Link>
+          <div className="flex items-center space-x-4">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+                {projeto.titulo}
+              </h1>
+              <p className="mt-1 text-gray-600 dark:text-gray-400">
+                {projeto.empresa}
+              </p>
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center space-x-3">
+          <Link
+            href={`/dashboard/projetos/${projetoId}/editar`}
+            className="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-lg text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors"
+          >
+            <svg
+              className="w-5 h-5 mr-2"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+              />
+            </svg>
+            Editar
+          </Link>
+          <button
+            onClick={() => setShowDeleteConfirm(true)}
+            className="inline-flex items-center px-4 py-2 border border-red-300 dark:border-red-600 text-sm font-medium rounded-lg text-red-700 dark:text-red-400 bg-white dark:bg-gray-700 hover:bg-red-50 dark:hover:bg-red-900/20 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors"
+          >
+            <svg
+              className="w-5 h-5 mr-2"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+              />
+            </svg>
+            Excluir
+          </button>
+          <Link
+            href={`/dashboard/projetos/${projetoId}/atividades/nova`}
+            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors"
+          >
+            <svg
+              className="w-5 h-5 mr-2"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 4v16m8-8H4"
+              />
+            </svg>
+            Nova Atividade
+          </Link>
+        </div>
+      </div>
+
+      {/* Confirmação de exclusão do Projeto */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-md w-full p-6">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+              Confirmar exclusão
+            </h3>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+              Tem certeza que deseja excluir o projeto "{projeto.titulo}"? Esta
+              ação não pode ser desfeita e todas as atividades relacionadas
+              também serão excluídas.
+            </p>
+            <div className="flex items-center justify-end space-x-3">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                disabled={isDeleting}
+                className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleDeleteProjeto}
+                disabled={isDeleting}
+                className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isDeleting ? "Excluindo..." : "Excluir"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmação de exclusão da Atividade */}
+      {activityToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-md w-full p-6">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+              Confirmar exclusão de atividade
+            </h3>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+              Tem certeza que deseja excluir esta atividade? Esta ação não pode ser desfeita.
+            </p>
+            <div className="flex items-center justify-end space-x-3">
+              <button
+                onClick={() => setActivityToDelete(null)}
+                disabled={isDeletingActivity}
+                className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => handleDeleteAtividade(activityToDelete)}
+                disabled={isDeletingActivity}
+                className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isDeletingActivity ? "Excluindo..." : "Excluir"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Resumo */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+          <p className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
+            {projeto.tipoCobranca === "fixo" ? "Valor do Projeto" : "Valor por Hora"}
+          </p>
+          <p className="text-2xl font-bold text-gray-900 dark:text-white">
+            {formatCurrency(
+                  projeto.tipoCobranca === "fixo"
+                    ? projeto.valorFixo ?? 0
+                    : projeto.valorHora ?? 0
+            )}
+          </p>
+        </div>
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+          <p className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
+            Horas Utilizadas
+          </p>
+          <p className="text-2xl font-bold text-gray-900 dark:text-white">
+            {totalHorasUtilizadas}h
+          </p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+            de {totalHorasEstimadas}h estimadas
+          </p>
+        </div>
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <p className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
+                {projeto.tipoCobranca === "fixo" ? "Valor do Projeto" : "Lucro atual estimado"}
+              </p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                {formatCurrency(lucroAtualEstimado)}
+              </p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                {projeto.tipoCobranca === "fixo" 
+                  ? "Valor fixo fechado"
+                  : `${totalHorasUtilizadas}h × ${formatCurrency(projeto.valorHora ?? 0)}/h`
+                }
+              </p>
+            </div>
+            <div className="sm:border-l sm:border-gray-200 sm:dark:border-gray-700 sm:pl-4">
+              <p className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
+                Total Faturado
+              </p>
+              <p className="text-3xl font-bold text-green-600 dark:text-green-400">
+                {formatCurrency(totalFaturado)}
+              </p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                Recebido: {formatCurrency(totalRecebido)}
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="border-b border-gray-200 dark:border-gray-700">
+        <nav className="-mb-px flex space-x-8" aria-label="Tabs">
+          <button
+            onClick={() => setActiveTab("atividades")}
+            className={`${
+              activeTab === "atividades"
+                ? "border-indigo-500 text-indigo-600 dark:text-indigo-400"
+                : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300"
+            } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
+          >
+            Atividades
+          </button>
+          <button
+            onClick={() => setActiveTab("financeiro")}
+            className={`${
+              activeTab === "financeiro"
+                ? "border-indigo-500 text-indigo-600 dark:text-indigo-400"
+                : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300"
+            } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
+          >
+            Financeiro
+          </button>
+        </nav>
+      </div>
+
+      {activeTab === "atividades" ? (
+        /* Atividades por Período */
+        loading ? (
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-12 text-center">
+            <p className="text-gray-600 dark:text-gray-400">
+              Carregando atividades...
+            </p>
+          </div>
+        ) : atividadesDoProjeto.length === 0 ? (
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-12">
+            <div className="text-center">
+              <svg
+                className="mx-auto h-12 w-12 text-gray-400"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={1.5}
+                  d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
+                />
+              </svg>
+              <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-white">
+                Nenhuma atividade
+              </h3>
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                Comece criando sua primeira atividade para este projeto.
+              </p>
+              <div className="mt-6">
+                <Link
+                  href={`/dashboard/projetos/${projetoId}/atividades/nova`}
+                  className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg text-white bg-indigo-600 hover:bg-indigo-700"
+                >
+                  Nova Atividade
+                </Link>
+              </div>
+            </div>
+          </div>
+        ) : (
+          Object.entries(
+            atividadesDoProjeto.reduce(
+              (acc, atividade) => {
+                const date = new Date(atividade.dataInicio);
+                // Formata o período usando o fuso horário configurado
+                const periodo = new Intl.DateTimeFormat("pt-BR", {
+                  timeZone: configuracoes.fusoHorario,
+                  month: "long",
+                  year: "numeric",
+                }).format(date);
+
+                if (!acc[periodo]) {
+                  acc[periodo] = [];
+                }
+                acc[periodo].push(atividade);
+                return acc;
+              },
+              {} as Record<string, Atividade[]>
+            )
+          ).map(([periodo, atividadesPeriodo]) => (
+            <div key={periodo} className="space-y-4">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white capitalize">
+                {periodo}
+              </h2>
+              <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                    <thead className="bg-gray-50 dark:bg-gray-900">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                          Atividade
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                          Início
+                        </th>
+
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                          Horas Estimadas
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                          Horas Utilizadas
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                          Status
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                          Término Estimado
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                          Custo da Tarefa
+                        </th>
+                        <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                          Ações
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                      {atividadesPeriodo.map((atividade) => (
+                        <tr
+                          key={atividade.id}
+                          className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                        >
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm font-medium text-gray-900 dark:text-white">
+                              {atividade.titulo}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm text-gray-600 dark:text-gray-400">
+                              {formatDate(atividade.dataInicio)}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm text-gray-900 dark:text-white">
+                              {atividade.horasAtuacao}h
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm text-gray-900 dark:text-white">
+                              {atividade.horasUtilizadas || 0}h
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span
+                              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                atividade.status === "concluida"
+                                  ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
+                                  : atividade.status === "em_execucao"
+                                    ? "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400"
+                                    : "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300"
+                              }`}
+                            >
+                              {atividade.status === "concluida"
+                                ? "Concluída"
+                                : atividade.status === "em_execucao"
+                                  ? "Em execução"
+                                  : "Pendente"}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm text-gray-600 dark:text-gray-400">
+                              {formatDate(atividade.dataFimEstimada)}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm font-medium text-indigo-600 dark:text-indigo-400">
+                              {formatCurrency(atividade.custoTarefa)}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                            <div className="flex items-center justify-end space-x-2">
+                              <Link
+                                href={`/dashboard/projetos/${projetoId}/atividades/${atividade.id}/editar`}
+                                className="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300"
+                                title="Editar atividade"
+                              >
+                                <svg
+                                  className="w-5 h-5"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                                  />
+                                </svg>
+                              </Link>
+                              <button
+                                onClick={() => setActivityToDelete(atividade.id)}
+                                className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
+                                title="Excluir atividade"
+                              >
+                                <svg
+                                  className="w-5 h-5"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                  />
+                                </svg>
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          ))
+        )
+      ) : (
+        <div className="space-y-6">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+             <div className="p-6 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+                <h3 className="text-lg font-medium text-gray-900 dark:text-white">Faturas do Projeto</h3>
+                <Link
+                  href="/dashboard/financeiro/novo"
+                  className="text-sm font-medium text-indigo-600 hover:text-indigo-500"
+                >
+                  Nova Fatura
+                </Link>
+             </div>
+             {faturasDoProjeto.length === 0 ? (
+               <div className="p-12 text-center">
+                 <p className="text-gray-500 dark:text-gray-400">Nenhuma fatura registrada para este projeto.</p>
+               </div>
+             ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                  <thead className="bg-gray-50 dark:bg-gray-900">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Vencimento</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Título</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Valor</th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                    {faturasDoProjeto.map((fatura) => (
+                      <tr key={fatura.id} className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span
+                              className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                                fatura.status === "pago"
+                                  ? "bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300"
+                                  : fatura.status === "atrasado"
+                                  ? "bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300"
+                                  : fatura.status === "cancelado"
+                                  ? "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300"
+                                  : "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-300"
+                              }`}
+                            >
+                              {fatura.status === "pago" ? "Pago" : fatura.status === "atrasado" ? "Atrasado" : fatura.status === "cancelado" ? "Cancelado" : "Pendente"}
+                            </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                          {formatDate(fatura.dataVencimento)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
+                          {fatura.titulo}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
+                          {formatCurrency(fatura.valor)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                           {fatura.status === 'pendente' || fatura.status === 'atrasado' ? (
+                             <button
+                               onClick={() => updateFatura(fatura.id, { status: 'pago', dataPagamento: new Date().toISOString() })}
+                               className="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400"
+                             >
+                               Marcar Pago
+                             </button>
+                           ) : (
+                             <span className="text-gray-400">-</span>
+                           )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+             )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

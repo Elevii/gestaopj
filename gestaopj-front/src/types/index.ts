@@ -1,0 +1,260 @@
+export interface Projeto {
+  id: string;
+  empresa: string;
+  titulo: string;
+  tipoCobranca?: TipoCobranca;
+  valorFixo?: number;
+  valorHora?: number;
+  /**
+   * Horas úteis por dia (1..24). Usado para estimativas de término.
+   */
+  horasUteisPorDia: number;
+  status: StatusProjeto;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type TipoCobranca = "horas" | "fixo";
+
+export type StatusProjeto = "ativo" | "pausado" | "concluido" | "cancelado";
+
+export type StatusAtividade = "pendente" | "em_execucao" | "concluida";
+
+export type TipoAtuacao = "reuniao" | "execucao" | "planejamento";
+
+export interface Atividade {
+  id: string;
+  projetoId: string;
+  titulo: string;
+  dataInicio: string;
+  horasAtuacao: number;
+  horasUtilizadas: number;
+  dataFimEstimada: string;
+  custoTarefa: number;
+  status: StatusAtividade;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateProjetoDTO {
+  empresa: string;
+  titulo: string;
+  tipoCobranca: TipoCobranca;
+  valorFixo?: number;
+  valorHora?: number;
+  horasUteisPorDia: number;
+  status?: StatusProjeto;
+}
+
+export interface CreateAtividadeDTO {
+  projetoId: string;
+  titulo: string;
+  dataInicio: string;
+  horasAtuacao: number;
+  status?: StatusAtividade;
+  horasUtilizadas?: number;
+  /**
+   * Custo da tarefa (BRL). Se não informado, será calculado automaticamente:
+   * horasAtuacao * valorHora
+   */
+  custoTarefa?: number;
+}
+
+export interface Atuacao {
+  id: string;
+  projetoId: string;
+  atividadeId: string;
+  /**
+   * Data da atuação no formato ISO date (YYYY-MM-DD)
+   */
+  data: string;
+  /**
+   * Horário de início (HH:mm). Opcional, usado em relatórios.
+   */
+  horarioInicio?: string;
+  /**
+   * Horas estimadas (HE) da atividade no momento do registro.
+   */
+  horasEstimadasNoRegistro: number;
+  horasUtilizadas: number;
+  tipo: TipoAtuacao;
+  /**
+   * Status da atividade no momento do registro.
+   */
+  statusAtividadeNoRegistro: StatusAtividade;
+  /**
+   * Título personalizado para atividade avulsa (até 30 caracteres)
+   */
+  tituloAvulsa?: string;
+  descricao?: string;
+  impactoGerado?: string;
+  /**
+   * URL da evidência da atuação (link para comprovação)
+   */
+  evidenciaUrl?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateAtuacaoDTO {
+  projetoId: string;
+  atividadeId: string;
+  data: string;
+  horarioInicio?: string;
+  horasEstimadasNoRegistro: number;
+  horasUtilizadas: number;
+  tipo: TipoAtuacao;
+  statusAtividadeNoRegistro: StatusAtividade;
+  /**
+   * Título personalizado para atividade avulsa (até 30 caracteres)
+   */
+  tituloAvulsa?: string;
+  descricao?: string;
+  impactoGerado?: string;
+  evidenciaUrl?: string;
+}
+
+export type OrcamentoCampoAtividade =
+  | "titulo"
+  | "status"
+  | "dataInicio"
+  | "dataFimEstimada"
+  | "horasAtuacao"
+  | "custoTarefa"
+  | "custoCalculado"
+  | "horasUtilizadas";
+
+export interface OrcamentoCheckpoint {
+  id: string;
+  titulo: string;
+  dataAlvo?: string; // ISO date
+  descricao?: string;
+  ordem: number;
+}
+
+export interface OrcamentoEntregavel {
+  id: string;
+  titulo: string;
+  descricao?: string;
+  ordem: number;
+  checkpoints: OrcamentoCheckpoint[];
+}
+
+export interface OrcamentoItem {
+  atividadeId: string;
+  ordem?: number;
+  entregavelId?: string;
+  inicioOverride?: string; // ISO date
+  fimOverride?: string; // ISO date
+}
+
+export interface Orcamento {
+  id: string;
+  projetoId: string;
+  titulo: string;
+  /**
+   * Data de início do cronograma do orçamento (ISO date).
+   */
+  dataInicioProjeto: string;
+  camposSelecionados: OrcamentoCampoAtividade[];
+  itens: OrcamentoItem[];
+  observacoes?: string;
+  usarEntregaveis: boolean;
+  mostrarSubtotaisPorEntregavel: boolean;
+  entregaveis?: OrcamentoEntregavel[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateOrcamentoDTO {
+  projetoId: string;
+  titulo: string;
+  dataInicioProjeto: string;
+  camposSelecionados: OrcamentoCampoAtividade[];
+  itens: OrcamentoItem[];
+  observacoes?: string;
+  usarEntregaveis: boolean;
+  mostrarSubtotaisPorEntregavel: boolean;
+  entregaveis?: OrcamentoEntregavel[];
+}
+
+export type StatusFatura = "pendente" | "pago" | "atrasado" | "cancelado";
+
+export interface Lembrete {
+  id: string;
+  faturaId: string;
+  titulo: string;
+  data: string; // ISO date
+  concluido: boolean;
+}
+
+export interface Fatura {
+  id: string;
+  projetoId: string;
+  titulo: string;
+  valor: number;
+  dataVencimento: string; // ISO date
+  dataPagamento?: string; // ISO date
+  status: StatusFatura;
+  cobrancaEnviada: boolean;
+  notaFiscalEmitida: boolean;
+  comprovanteEnviado: boolean;
+  lembretes: Lembrete[];
+  observacoes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type FrequenciaRecorrencia = "semanal" | "quinzenal" | "mensal" | "anual";
+
+export interface RecorrenciaDTO {
+  frequencia: FrequenciaRecorrencia;
+  repeticoes: number; // 2 a 12
+}
+
+export interface CreateLembreteDTO {
+  titulo: string;
+  diasAntesVencimento?: number; // Se definido, calcula data baseada no vencimento
+  dataFixa?: string; // ISO date, se diasAntesVencimento não for usado
+}
+
+export interface CreateFaturaDTO {
+  projetoId: string;
+  titulo: string;
+  valor: number;
+  dataVencimento: string; // ISO date
+  observacoes?: string;
+  recorrencia?: RecorrenciaDTO;
+  lembretesIniciais?: CreateLembreteDTO[];
+}
+
+export interface UpdateFaturaDTO {
+  titulo?: string;
+  valor?: number;
+  dataVencimento?: string;
+  dataPagamento?: string;
+  status?: StatusFatura;
+  cobrancaEnviada?: boolean;
+  notaFiscalEmitida?: boolean;
+  comprovanteEnviado?: boolean;
+  observacoes?: string;
+  lembretes?: Lembrete[];
+}
+
+export interface Configuracoes {
+  tema: "claro" | "escuro" | "sistema";
+  nomeEmpresa: string;
+  horasUteisPadrao: number;
+  fusoHorario: string; // Ex: "America/Sao_Paulo"
+  formatoData: "dd/MM/yyyy" | "MM/dd/yyyy" | "yyyy-MM-dd";
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface UpdateConfiguracoesDTO {
+  tema?: "claro" | "escuro" | "sistema";
+  nomeEmpresa?: string;
+  horasUteisPadrao?: number;
+  fusoHorario?: string;
+  formatoData?: "dd/MM/yyyy" | "MM/dd/yyyy" | "yyyy-MM-dd";
+}
