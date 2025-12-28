@@ -31,7 +31,6 @@ export default function AtuacaoPage() {
   const { configuracoes } = useConfiguracoes();
 
   const [filters, setFilters] = useState({
-    empresa: "",
     projetoId: "",
     dataInicio: "",
     dataFim: "",
@@ -64,13 +63,6 @@ export default function AtuacaoPage() {
     return map;
   }, [projetos]);
 
-  const empresas = useMemo(() => {
-    const set = new Set<string>();
-    for (const p of projetos) {
-      if (p.empresa) set.add(p.empresa);
-    }
-    return Array.from(set).sort((a, b) => a.localeCompare(b, "pt-BR"));
-  }, [projetos]);
 
   // HD por atuação: horas disponíveis para a atividade ANTES do registro
   const hdByAtuacaoId = useMemo(() => {
@@ -95,16 +87,11 @@ export default function AtuacaoPage() {
 
   const filteredAtuacoes = useMemo(() => {
     return atuacoes
-      .filter((a) => {
-        if (!filters.empresa) return true;
-        const projeto = projetosById.get(a.projetoId);
-        return projeto?.empresa === filters.empresa;
-      })
       .filter((a) => (filters.projetoId ? a.projetoId === filters.projetoId : true))
       .filter((a) => (filters.dataInicio ? a.data >= filters.dataInicio : true))
       .filter((a) => (filters.dataFim ? a.data <= filters.dataFim : true))
       .sort((a, b) => (a.data < b.data ? 1 : a.data > b.data ? -1 : 0));
-  }, [atuacoes, filters.dataFim, filters.dataInicio, filters.empresa, filters.projetoId, projetosById]);
+  }, [atuacoes, filters.dataFim, filters.dataInicio, filters.projetoId, projetosById]);
 
   // Agrupar atuações por mês/ano
   const atuacoesPorMesAno = useMemo(() => {
@@ -211,25 +198,6 @@ export default function AtuacaoPage() {
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Empresa
-            </label>
-            <select
-              value={filters.empresa}
-              onChange={(e) =>
-                setFilters((prev) => ({ ...prev, empresa: e.target.value, projetoId: "" }))
-              }
-              className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors dark:bg-gray-700 dark:text-white"
-            >
-              <option value="">Todas</option>
-              {empresas.map((empresa) => (
-                <option key={empresa} value={empresa}>
-                  {empresa}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               Projeto
             </label>
             <select
@@ -240,13 +208,11 @@ export default function AtuacaoPage() {
               className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors dark:bg-gray-700 dark:text-white"
             >
               <option value="">Todos</option>
-              {projetos
-                .filter((p) => (filters.empresa ? p.empresa === filters.empresa : true))
-                .map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.titulo}
-                  </option>
-                ))}
+              {projetos.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.titulo}
+                </option>
+              ))}
             </select>
           </div>
           <div>
@@ -279,7 +245,7 @@ export default function AtuacaoPage() {
             <button
               type="button"
               onClick={() =>
-                setFilters({ empresa: "", projetoId: "", dataInicio: "", dataFim: "" })
+                setFilters({ projetoId: "", dataInicio: "", dataFim: "" })
               }
               className="w-full px-4 py-3 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-600"
             >

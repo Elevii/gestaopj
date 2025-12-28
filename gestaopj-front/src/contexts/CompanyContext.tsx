@@ -12,6 +12,7 @@ import { Subscription, PlanLimits } from "@/types/subscription";
 import { companyService } from "@/services/companyService";
 import { subscriptionService } from "@/services/subscriptionService";
 import { authService } from "@/services/authService";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface CompanyContextType {
   company: Company | null;
@@ -35,6 +36,7 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
   const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [limits, setLimits] = useState<PlanLimits | null>(null);
   const [loading, setLoading] = useState(true);
+  const { company: authCompany } = useAuth();
 
   const loadCompanyData = async () => {
     try {
@@ -55,7 +57,7 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     loadCompanyData();
-  }, []);
+  }, [authCompany?.id]);
 
   const refreshCompany = async () => {
     await loadCompanyData();

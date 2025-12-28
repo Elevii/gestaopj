@@ -64,6 +64,7 @@ export interface CreateAtividadeDTO {
 
 export interface Atuacao {
   id: string;
+  companyId: string; // ID da empresa
   projetoId: string;
   atividadeId: string;
   /**
@@ -157,6 +158,7 @@ export interface OrcamentoItem {
 
 export interface Orcamento {
   id: string;
+  companyId: string; // ID da empresa
   projetoId: string;
   titulo: string;
   /**
@@ -197,6 +199,7 @@ export interface Lembrete {
 
 export interface Fatura {
   id: string;
+  companyId: string; // ID da empresa
   projetoId: string;
   titulo: string;
   valor: number;

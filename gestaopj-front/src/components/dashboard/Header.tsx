@@ -65,12 +65,21 @@ export default function Header({ onMenuClick }: HeaderProps) {
   };
 
   const handleSwitchCompany = async (companyId: string) => {
+    if (!user) {
+      console.error("Usuário não autenticado");
+      return;
+    }
+    
     try {
       await switchCompany(companyId);
       setIsCompanyOpen(false);
       router.refresh();
     } catch (error) {
       console.error("Erro ao trocar empresa:", error);
+      // Se erro de autenticação, redirecionar para login
+      if (error instanceof Error && error.message.includes("não autenticado")) {
+        router.push("/login");
+      }
     }
   };
 
@@ -149,8 +158,8 @@ export default function Header({ onMenuClick }: HeaderProps) {
 
         {/* Right side */}
         <div className="flex items-center space-x-4">
-          {/* Company selector (se múltiplas empresas) */}
-          {companiesData.length > 1 && (
+          {/* Company selector (sempre visível) */}
+          {companiesData.length > 0 && (
             <div className="relative" ref={companyRef}>
               <button
                 onClick={() => setIsCompanyOpen(!isCompanyOpen)}

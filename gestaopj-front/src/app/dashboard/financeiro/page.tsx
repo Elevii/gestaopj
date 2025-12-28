@@ -19,7 +19,6 @@ export default function FinanceiroPage() {
   const [filters, setFilters] = useState({
     startDate: "",
     endDate: "",
-    empresa: "",
     projetoId: "",
   });
 
@@ -32,26 +31,13 @@ export default function FinanceiroPage() {
 
   const getProjectName = (id: string) => {
     const proj = projetos.find((p) => p.id === id);
-    return proj ? `${proj.empresa} - ${proj.titulo}` : "Projeto não encontrado";
+    return proj ? proj.titulo : "Projeto não encontrado";
   };
-
-  // Listas para os selects de filtros
-  const empresas = useMemo(() => {
-    const unique = new Set(projetos.map((p) => p.empresa));
-    return Array.from(unique).sort();
-  }, [projetos]);
-
-  const projetosFiltrados = useMemo(() => {
-    if (!filters.empresa) return projetos;
-    return projetos.filter((p) => p.empresa === filters.empresa);
-  }, [projetos, filters.empresa]);
 
   // Lógica de filtragem das faturas
   const faturasFiltradas = useMemo(() => {
     return faturas.filter((fatura) => {
-      // Filtro por Empresa/Projeto
-      const projeto = projetos.find((p) => p.id === fatura.projetoId);
-      if (filters.empresa && projeto?.empresa !== filters.empresa) return false;
+      // Filtro por Projeto
       if (filters.projetoId && fatura.projetoId !== filters.projetoId) return false;
 
       // Filtro por Data
@@ -161,7 +147,6 @@ export default function FinanceiroPage() {
     setFilters({
       startDate: "",
       endDate: "",
-      empresa: "",
       projetoId: "",
     });
   };
@@ -243,23 +228,6 @@ export default function FinanceiroPage() {
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wider">
-              Empresa
-            </label>
-            <select
-              value={filters.empresa}
-              onChange={(e) => setFilters({ ...filters, empresa: e.target.value, projetoId: "" })}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm"
-            >
-              <option value="">Todas</option>
-              {empresas.map((emp) => (
-                <option key={emp} value={emp}>
-                  {emp}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wider">
               Projeto
             </label>
             <select
@@ -268,7 +236,7 @@ export default function FinanceiroPage() {
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm"
             >
               <option value="">Todos</option>
-              {projetosFiltrados.map((p) => (
+              {projetos.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.titulo}
                 </option>

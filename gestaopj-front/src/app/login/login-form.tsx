@@ -4,6 +4,9 @@ import { useState, FormEvent, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { authService } from "@/services/authService";
+import { companyService } from "@/services/companyService";
+import { CompanyMembership } from "@/types/companyMembership";
+import { Company } from "@/types/company";
 
 export default function LoginForm() {
   const searchParams = useSearchParams();
@@ -16,6 +19,12 @@ export default function LoginForm() {
     {}
   );
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
+  const [showCompanySelector, setShowCompanySelector] = useState(false);
+  const [loginResult, setLoginResult] = useState<{
+    companies: CompanyMembership[];
+    companiesData: Company[];
+  } | null>(null);
+  const [selectingCompany, setSelectingCompany] = useState(false);
 
   useEffect(() => {
     if (searchParams.get("cadastro") === "sucesso") {
@@ -61,11 +70,34 @@ export default function LoginForm() {
     setIsLoading(true);
     try {
       const result = await authService.login({ email, password });
-      // Redirecionar baseado em se usuário tem empresas
-      if (result.companies.length > 0) {
-        router.push("/dashboard");
-      } else {
+      
+      // Se não tem empresas, redirecionar para onboarding
+      if (result.companies.length === 0) {
         router.push("/onboarding");
+        return;
+      }
+
+      // Se já tem empresa selecionada (login já seleciona automaticamente a primeira)
+      if (result.company) {
+        router.push("/dashboard");
+        return;
+      }
+
+      // Se não tem empresa selecionada mas tem empresas disponíveis, mostrar seletor
+      if (result.companies.length > 0) {
+        // Buscar dados completos das empresas
+        const companiesData = await Promise.all(
+          result.companies.map((membership) =>
+            companyService.findById(membership.companyId)
+          )
+        );
+        const validCompanies = companiesData.filter((c): c is Company => c !== null);
+
+        setLoginResult({
+          companies: result.companies,
+          companiesData: validCompanies,
+        });
+        setShowCompanySelector(true);
       }
     } catch (error: any) {
       // Erros esperados (credenciais inválidas, usuário inativo) não precisam ser logados
@@ -85,6 +117,26 @@ export default function LoginForm() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleSelectCompany = async (companyId: string) => {
+    setSelectingCompany(true);
+    try {
+      await authService.switchCompany(companyId);
+      router.push("/dashboard");
+    } catch (error) {
+      console.error("Erro ao selecionar empresa:", error);
+      setSelectingCompany(false);
+    }
+  };
+
+  const getRoleLabel = (role: string) => {
+    const labels: Record<string, string> = {
+      owner: "Proprietário",
+      admin: "Administrador",
+      member: "Membro",
+    };
+    return labels[role] || role;
   };
 
   return (
@@ -340,6 +392,49 @@ export default function LoginForm() {
           © {new Date().getFullYear()} AtuaPJ. Todos os direitos reservados.
         </p>
       </div>
+
+      {/* Company Selector Modal */}
+      {showCompanySelector && loginResult && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-8 max-w-md w-full">
+            <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+              Selecione uma empresa
+            </h3>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
+              Escolha a empresa que deseja acessar
+            </p>
+            <div className="space-y-3">
+              {loginResult.companiesData.map((company) => {
+                const membership = loginResult.companies.find(
+                  (m) => m.companyId === company.id
+                );
+                return (
+                  <button
+                    key={company.id}
+                    onClick={() => handleSelectCompany(company.id)}
+                    disabled={selectingCompany}
+                    className="w-full text-left p-4 border-2 border-gray-200 dark:border-gray-700 rounded-lg hover:border-indigo-500 dark:hover:border-indigo-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <p className="font-semibold text-gray-900 dark:text-white">
+                      {company.name}
+                    </p>
+                    {membership && (
+                      <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                        {getRoleLabel(membership.role)}
+                      </p>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+            {selectingCompany && (
+              <div className="mt-4 text-center">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-indigo-600 mx-auto"></div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -13,6 +13,7 @@ import { Atuacao, CreateAtuacaoDTO, StatusAtividade } from "@/types";
 import { atuacaoService } from "@/services/atuacaoService";
 import { useAtividades } from "@/contexts/AtividadeContext";
 import { useAuth } from "@/contexts/AuthContext";
+import { useCompany } from "@/contexts/CompanyContext";
 
 interface AtuacaoContextType {
   atuacoes: Atuacao[];
@@ -41,6 +42,7 @@ export function AtuacaoProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const { atividades, updateAtividade } = useAtividades();
   const { user } = useAuth();
+  const { company } = useCompany();
 
   const refreshAtuacoes = useCallback(async () => {
     try {
@@ -56,7 +58,7 @@ export function AtuacaoProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     refreshAtuacoes();
-  }, [refreshAtuacoes]);
+  }, [refreshAtuacoes, company?.id]);
 
   const totalHorasPorAtividade = useMemo(() => {
     const totals = new Map<string, number>();

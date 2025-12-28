@@ -10,6 +10,7 @@ import {
 } from "react";
 import { CreateOrcamentoDTO, Orcamento } from "@/types";
 import { orcamentoService } from "@/services/orcamentoService";
+import { useCompany } from "@/contexts/CompanyContext";
 
 interface OrcamentoContextType {
   orcamentos: Orcamento[];
@@ -26,6 +27,7 @@ const OrcamentoContext = createContext<OrcamentoContextType | undefined>(undefin
 export function OrcamentoProvider({ children }: { children: ReactNode }) {
   const [orcamentos, setOrcamentos] = useState<Orcamento[]>([]);
   const [loading, setLoading] = useState(true);
+  const { company } = useCompany();
 
   const refreshOrcamentos = useCallback(async () => {
     try {
@@ -41,7 +43,7 @@ export function OrcamentoProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     refreshOrcamentos();
-  }, [refreshOrcamentos]);
+  }, [refreshOrcamentos, company?.id]);
 
   const createOrcamento = useCallback(async (data: CreateOrcamentoDTO) => {
     const novo = await orcamentoService.create(data);

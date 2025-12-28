@@ -8,6 +8,7 @@ import { useCompany } from "@/contexts/CompanyContext";
 import { companyService } from "@/services/companyService";
 import { inviteService } from "@/services/inviteService";
 import { companyMembershipService } from "@/services/companyMembershipService";
+import { authService } from "@/services/authService";
 import { Company } from "@/types/company";
 import { Invite } from "@/types/invite";
 import { CompanyMembership } from "@/types/companyMembership";
@@ -90,8 +91,8 @@ export default function EmpresasPage() {
     }
   };
 
-  const handleAcceptInvite = async (invite: Invite) => {
-    if (!user) return;
+  const handleAcceptInvite = async (invite: InviteWithCompany) => {
+    if (!user || !invite.company) return;
 
     try {
       // Aceitar convite
@@ -104,37 +105,15 @@ export default function EmpresasPage() {
         role: invite.role,
       });
 
-      // Atualizar autenticação
+      // Selecionar empresa aceita e atualizar autenticação
+      await authService.switchCompany(invite.companyId);
       await refreshAuth();
       
-      // Recarregar dados
-      const pendingInvites = await inviteService.findPendingByEmail(user.email);
-      const invitesWithCompanies = await Promise.all(
-        pendingInvites.map(async (inv) => {
-          const comp = await companyService.findById(inv.companyId);
-          return { ...inv, company: comp };
-        })
-      );
-      const validInvites = invitesWithCompanies.filter(
-        (inv): inv is InviteWithCompany => inv.company !== null
-      );
-      setInvites(validInvites);
-
-      // Recarregar empresas
-      const updatedMemberships = await companyMembershipService.findByUserId(user.id);
-      const companiesData: CompanyWithMembership[] = [];
-      for (const membership of updatedMemberships) {
-        const company = await companyService.findById(membership.companyId);
-        if (company && company.active) {
-          companiesData.push({
-            ...company,
-            membership,
-          });
-        }
-      }
-      setCompanies(companiesData);
-
-      alert("Convite aceito com sucesso!");
+      // Aguardar um pouco para garantir que o estado seja atualizado
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // Usar window.location para forçar reload completo e garantir que o estado seja atualizado
+      window.location.href = "/dashboard";
     } catch (error: any) {
       alert(error.message || "Erro ao aceitar convite");
     }

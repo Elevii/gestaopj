@@ -1,4 +1,6 @@
 import { Atuacao, CreateAtuacaoDTO } from "@/types";
+import { authService } from "./authService";
+import { projetoService } from "./projetoService";
 
 // Simulação de API - em produção será substituído por chamadas HTTP reais
 class AtuacaoService {
@@ -59,9 +61,22 @@ class AtuacaoService {
     }
   }
 
-  async findAll(): Promise<Atuacao[]> {
+  async findAll(companyId?: string): Promise<Atuacao[]> {
     await new Promise((resolve) => setTimeout(resolve, 200));
-    return this.getAtuacoesFromStorage();
+    const atuacoes = this.getAtuacoesFromStorage();
+    
+    // Se companyId fornecido, filtrar por empresa
+    if (companyId) {
+      return atuacoes.filter((a) => a.companyId === companyId);
+    }
+    
+    // Se não fornecido, usar empresa do usuário logado
+    const currentCompany = await authService.getCurrentCompany();
+    if (currentCompany) {
+      return atuacoes.filter((a) => a.companyId === currentCompany.id);
+    }
+    
+    return atuacoes;
   }
 
   async findByProjetoId(projetoId: string): Promise<Atuacao[]> {
@@ -72,11 +87,18 @@ class AtuacaoService {
   async create(data: CreateAtuacaoDTO): Promise<Atuacao> {
     await new Promise((resolve) => setTimeout(resolve, 400));
 
+    // Obter companyId do projeto
+    const projeto = await projetoService.findById(data.projetoId);
+    if (!projeto) {
+      throw new Error("Projeto não encontrado");
+    }
+
     const atuacoes = this.getAtuacoesFromStorage();
     const now = new Date().toISOString();
 
     const novaAtuacao: Atuacao = {
       id: `atu_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      companyId: projeto.companyId,
       ...data,
       createdAt: now,
       updatedAt: now,

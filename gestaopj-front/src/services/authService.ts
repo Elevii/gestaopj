@@ -206,7 +206,13 @@ class AuthService {
   }> {
     const session = this.getSession();
     if (!session) {
-      throw new Error("Usuário não autenticado");
+      // Tentar recarregar sessão do localStorage uma vez antes de falhar
+      const stored = typeof window !== "undefined" ? localStorage.getItem(SESSION_KEY) : null;
+      if (!stored) {
+        throw new Error("Usuário não autenticado");
+      }
+      // Se encontrou no localStorage mas getSession retornou null, pode ser problema de parsing
+      throw new Error("Sessão inválida. Faça login novamente.");
     }
 
     // Verificar se usuário tem membership nesta empresa

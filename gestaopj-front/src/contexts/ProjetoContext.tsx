@@ -10,6 +10,7 @@ import {
 import { Projeto, CreateProjetoDTO } from "@/types";
 import { projetoService } from "@/services/projetoService";
 import { authService } from "@/services/authService";
+import { useCompany } from "@/contexts/CompanyContext";
 
 interface ProjetoContextType {
   projetos: Projeto[];
@@ -26,38 +27,21 @@ const ProjetoContext = createContext<ProjetoContextType | undefined>(undefined);
 export function ProjetoProvider({ children }: { children: ReactNode }) {
   const [projetos, setProjetos] = useState<Projeto[]>([]);
   const [loading, setLoading] = useState(true);
+  const { company } = useCompany();
 
   const loadProjetos = async () => {
     try {
       setLoading(true);
-      const currentUser = await authService.getCurrentUser();
+      const currentCompany = await authService.getCurrentCompany();
       
-      if (!currentUser) {
+      if (!currentCompany) {
         setProjetos([]);
         return;
       }
 
-      // Buscar projetos de todas as empresas onde o usuário é membro
-      const userCompanies = await authService.getUserCompanies(currentUser.id);
-      
-      if (userCompanies.length === 0) {
-        setProjetos([]);
-        return;
-      }
-
-      // Buscar projetos de cada empresa onde o usuário é membro
-      const allProjetos: Projeto[] = [];
-      for (const membership of userCompanies) {
-        const projetosDaEmpresa = await projetoService.findAll(membership.companyId);
-        allProjetos.push(...projetosDaEmpresa);
-      }
-
-      // Remover duplicatas (caso algum projeto apareça em múltiplas buscas)
-      const projetosUnicos = Array.from(
-        new Map(allProjetos.map((p) => [p.id, p])).values()
-      );
-
-      setProjetos(projetosUnicos);
+      // Buscar projetos apenas da empresa ativa
+      const projetosDaEmpresa = await projetoService.findAll(currentCompany.id);
+      setProjetos(projetosDaEmpresa);
     } catch (error) {
       console.error("Erro ao carregar projetos:", error);
       setProjetos([]);
@@ -68,7 +52,7 @@ export function ProjetoProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     loadProjetos();
-  }, []);
+  }, [company?.id]);
 
   const createProjeto = async (data: CreateProjetoDTO): Promise<Projeto> => {
     // Garantir que companyId está presente

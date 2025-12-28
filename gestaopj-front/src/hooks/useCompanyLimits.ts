@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect } from "react";
 import { useCompany } from "@/contexts/CompanyContext";
 import { projetoService } from "@/services/projetoService";
-import { userService } from "@/services/userService";
+import { companyMembershipService } from "@/services/companyMembershipService";
 
 interface LimitsStatus {
   projects: {
@@ -38,8 +38,8 @@ export function useCompanyLimits() {
         setProjectsCount(projetosAtivos.length);
 
         // Contar membros ativos
-        const usuarios = await userService.findByCompanyId(company.id);
-        setMembersCount(usuarios.length);
+        const memberships = await companyMembershipService.findByCompanyId(company.id);
+        setMembersCount(memberships.length);
       } catch (error) {
         console.error("Erro ao carregar contagens:", error);
       } finally {
@@ -103,8 +103,8 @@ export function useCompanyLimits() {
         );
         setProjectsCount(projetosAtivos.length);
 
-        const usuarios = await userService.findByCompanyId(company.id);
-        setMembersCount(usuarios.length);
+        const memberships = await companyMembershipService.findByCompanyId(company.id);
+        setMembersCount(memberships.length);
       }
       setLoading(false);
     },

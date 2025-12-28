@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useProjetos } from "@/contexts/ProjetoContext";
 import { useConfiguracoes } from "@/contexts/ConfiguracoesContext";
 import { useAuth } from "@/contexts/AuthContext";
+import { useCompany } from "@/contexts/CompanyContext";
 import { companyService } from "@/services/companyService";
 import { Company } from "@/types/company";
 import { TipoCobranca } from "@/types";
@@ -14,10 +15,9 @@ export default function NovoProjetoPage() {
   const router = useRouter();
   const { createProjeto } = useProjetos();
   const { configuracoes } = useConfiguracoes();
-  const { userCompanies, company: currentCompany } = useAuth();
+  const { company: currentCompany } = useAuth();
+  const { company: activeCompany } = useCompany();
   const [isLoading, setIsLoading] = useState(false);
-  const [availableCompanies, setAvailableCompanies] = useState<Company[]>([]);
-  const [loadingCompanies, setLoadingCompanies] = useState(true);
   const [errors, setErrors] = useState<{
     empresa?: string;
     titulo?: string;
@@ -27,55 +27,12 @@ export default function NovoProjetoPage() {
   }>({});
 
   const [formData, setFormData] = useState({
-    empresa: "",
     titulo: "",
     valorHora: "",
     valorFixo: "",
     tipoCobranca: "horas" as TipoCobranca,
     horasUteisPorDia: "8",
   });
-
-  // Carregar empresas onde usuário é Owner ou Admin
-  useEffect(() => {
-    const loadCompanies = async () => {
-      try {
-        setLoadingCompanies(true);
-        // Filtrar apenas empresas onde usuário é owner ou admin
-        const ownerOrAdminMemberships = userCompanies.filter(
-          (membership) => membership.role === "owner" || membership.role === "admin"
-        );
-
-        // Buscar dados completos das empresas
-        const companies = await Promise.all(
-          ownerOrAdminMemberships.map((membership) =>
-            companyService.findById(membership.companyId)
-          )
-        );
-
-        const validCompanies = companies.filter(
-          (c): c is Company => c !== null && c.active
-        );
-
-        setAvailableCompanies(validCompanies);
-
-        // Se houver empresa atual e ela estiver na lista, selecionar por padrão
-        if (currentCompany && validCompanies.some((c) => c.id === currentCompany.id)) {
-          setFormData((prev) => ({ ...prev, empresa: currentCompany.id }));
-        } else if (validCompanies.length > 0) {
-          // Senão, selecionar a primeira
-          setFormData((prev) => ({ ...prev, empresa: validCompanies[0].id }));
-        }
-      } catch (error) {
-        console.error("Erro ao carregar empresas:", error);
-      } finally {
-        setLoadingCompanies(false);
-      }
-    };
-
-    if (userCompanies.length > 0) {
-      loadCompanies();
-    }
-  }, [userCompanies, currentCompany]);
 
   // Inicializar com horas úteis padrão das configurações
   useEffect(() => {
@@ -137,15 +94,15 @@ export default function NovoProjetoPage() {
 
     // Validação
     const newErrors: {
-      empresa?: string;
       titulo?: string;
       valorHora?: string;
       valorFixo?: string;
       horasUteisPorDia?: string;
     } = {};
 
-    if (!formData.empresa) {
-      newErrors.empresa = "Selecione uma empresa";
+    if (!activeCompany) {
+      setErrors({ titulo: "Nenhuma empresa selecionada. Selecione uma empresa no menu superior." });
+      return;
     }
 
     if (!formData.titulo.trim()) {
@@ -189,17 +146,15 @@ export default function NovoProjetoPage() {
     // Criar projeto
     setIsLoading(true);
     try {
-      // Buscar nome da empresa selecionada
-      const selectedCompany = availableCompanies.find((c) => c.id === formData.empresa);
-      if (!selectedCompany) {
-        setErrors({ empresa: "Empresa selecionada não encontrada" });
+      if (!activeCompany) {
+        setErrors({ titulo: "Nenhuma empresa selecionada. Selecione uma empresa no menu superior." });
         setIsLoading(false);
         return;
       }
 
       const novoProjeto = await createProjeto({
-        companyId: formData.empresa,
-        empresa: selectedCompany.name,
+        companyId: activeCompany.id,
+        empresa: activeCompany.name,
         titulo: formData.titulo.trim(),
         tipoCobranca: formData.tipoCobranca,
         valorHora: formData.tipoCobranca === "horas" ? parseCurrency(formData.valorHora) : undefined,
@@ -255,82 +210,29 @@ export default function NovoProjetoPage() {
       {/* Form */}
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 md:p-8">
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Selecionar Empresa */}
+          {/* Empresa Ativa (Read-only) */}
           <div>
             <label
               htmlFor="empresa"
               className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
             >
-              Selecionar Empresa <span className="text-red-500">*</span>
+              Empresa <span className="text-red-500">*</span>
             </label>
-            {loadingCompanies ? (
-              <div className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 flex items-center">
-                <svg
-                  className="animate-spin h-5 w-5 text-gray-400 mr-2"
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                >
-                  <circle
-                    className="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    strokeWidth="4"
-                  ></circle>
-                  <path
-                    className="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                  ></path>
-                </svg>
-                <span className="text-gray-500 dark:text-gray-400">Carregando empresas...</span>
-              </div>
-            ) : availableCompanies.length === 0 ? (
+            {activeCompany ? (
+              <input
+                id="empresa"
+                name="empresa"
+                type="text"
+                value={activeCompany.name}
+                readOnly
+                className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-700 dark:text-gray-300 cursor-not-allowed"
+              />
+            ) : (
               <div className="w-full px-4 py-3 border border-yellow-300 dark:border-yellow-600 rounded-lg bg-yellow-50 dark:bg-yellow-900/20">
                 <p className="text-sm text-yellow-800 dark:text-yellow-200">
-                  Você precisa ser Owner ou Admin de pelo menos uma empresa para criar projetos.
+                  Nenhuma empresa selecionada. Selecione uma empresa no menu superior.
                 </p>
               </div>
-            ) : (
-              <>
-                <select
-                  id="empresa"
-                  name="empresa"
-                  required
-                  value={formData.empresa}
-                  onChange={handleChange}
-                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors dark:bg-gray-700 dark:border-gray-600 dark:text-white ${
-                    errors.empresa
-                      ? "border-red-500 focus:ring-red-500 focus:border-red-500"
-                      : "border-gray-300"
-                  }`}
-                >
-                  <option value="">Selecione uma empresa</option>
-                  {availableCompanies.map((comp) => {
-                    const membership = userCompanies.find(
-                      (m) => m.companyId === comp.id
-                    );
-                    const roleLabel =
-                      membership?.role === "owner"
-                        ? "Proprietário"
-                        : membership?.role === "admin"
-                        ? "Administrador"
-                        : "";
-                    return (
-                      <option key={comp.id} value={comp.id}>
-                        {comp.name} {roleLabel && `(${roleLabel})`}
-                      </option>
-                    );
-                  })}
-                </select>
-                {errors.empresa && (
-                  <p className="mt-1 text-sm text-red-600 dark:text-red-400">
-                    {errors.empresa}
-                  </p>
-                )}
-              </>
             )}
           </div>
 

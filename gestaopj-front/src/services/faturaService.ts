@@ -37,19 +37,15 @@ class FaturaService {
     await new Promise((resolve) => setTimeout(resolve, 300));
     const faturas = this.getFaturasFromStorage();
     
-    // Se companyId fornecido, filtrar por empresa através dos projetos
+    // Se companyId fornecido, filtrar por empresa
     if (companyId) {
-      const projetos = await projetoService.findAll(companyId);
-      const projetoIds = projetos.map((p) => p.id);
-      return faturas.filter((f) => projetoIds.includes(f.projetoId));
+      return faturas.filter((f) => f.companyId === companyId);
     }
     
     // Se não fornecido, usar empresa do usuário logado
     const currentCompany = await authService.getCurrentCompany();
     if (currentCompany) {
-      const projetos = await projetoService.findAll(currentCompany.id);
-      const projetoIds = projetos.map((p) => p.id);
-      return faturas.filter((f) => projetoIds.includes(f.projetoId));
+      return faturas.filter((f) => f.companyId === currentCompany.id);
     }
     
     return faturas;
@@ -69,6 +65,12 @@ class FaturaService {
 
   async create(data: CreateFaturaDTO): Promise<Fatura[]> {
     await new Promise((resolve) => setTimeout(resolve, 300));
+
+    // Obter companyId do projeto
+    const projeto = await projetoService.findById(data.projetoId);
+    if (!projeto) {
+      throw new Error("Projeto não encontrado");
+    }
 
     const faturas = this.getFaturasFromStorage();
     const novasFaturas: Fatura[] = [];
@@ -159,6 +161,7 @@ class FaturaService {
 
       const novaFatura: Fatura = {
         id: faturaId,
+        companyId: projeto.companyId,
         projetoId: data.projetoId,
         titulo: tituloFatura,
         valor: data.valor,
@@ -217,13 +220,24 @@ class FaturaService {
     this.saveFaturasToStorage(filtered);
   }
 
-  async getResumoFinanceiro(): Promise<{
+  async getResumoFinanceiro(companyId?: string): Promise<{
     recebidoMes: number;
     aReceber: number;
     atrasado: number;
   }> {
     await new Promise((resolve) => setTimeout(resolve, 300));
-    const faturas = this.getFaturasFromStorage();
+    let faturas = this.getFaturasFromStorage();
+    
+    // Filtrar por empresa se especificado ou usar empresa ativa
+    if (companyId) {
+      faturas = faturas.filter((f) => f.companyId === companyId);
+    } else {
+      const currentCompany = await authService.getCurrentCompany();
+      if (currentCompany) {
+        faturas = faturas.filter((f) => f.companyId === currentCompany.id);
+      }
+    }
+    
     const hoje = new Date();
     const mesAtual = hoje.getMonth();
     const anoAtual = hoje.getFullYear();

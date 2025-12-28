@@ -32,19 +32,15 @@ class OrcamentoService {
     await new Promise((resolve) => setTimeout(resolve, 200));
     const orcamentos = this.getOrcamentosFromStorage();
     
-    // Se companyId fornecido, filtrar por empresa através dos projetos
+    // Se companyId fornecido, filtrar por empresa
     if (companyId) {
-      const projetos = await projetoService.findAll(companyId);
-      const projetoIds = projetos.map((p) => p.id);
-      return orcamentos.filter((o) => projetoIds.includes(o.projetoId));
+      return orcamentos.filter((o) => o.companyId === companyId);
     }
     
     // Se não fornecido, usar empresa do usuário logado
     const currentCompany = await authService.getCurrentCompany();
     if (currentCompany) {
-      const projetos = await projetoService.findAll(currentCompany.id);
-      const projetoIds = projetos.map((p) => p.id);
-      return orcamentos.filter((o) => projetoIds.includes(o.projetoId));
+      return orcamentos.filter((o) => o.companyId === currentCompany.id);
     }
     
     return orcamentos;
@@ -63,10 +59,17 @@ class OrcamentoService {
   async create(data: CreateOrcamentoDTO): Promise<Orcamento> {
     await new Promise((resolve) => setTimeout(resolve, 300));
 
+    // Obter companyId do projeto
+    const projeto = await projetoService.findById(data.projetoId);
+    if (!projeto) {
+      throw new Error("Projeto não encontrado");
+    }
+
     const now = new Date().toISOString();
     const orcamentos = this.getOrcamentosFromStorage();
     const novo: Orcamento = {
       id: `orc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      companyId: projeto.companyId,
       ...data,
       createdAt: now,
       updatedAt: now,

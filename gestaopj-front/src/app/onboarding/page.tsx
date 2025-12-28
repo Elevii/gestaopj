@@ -5,12 +5,20 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
 import { inviteService } from "@/services/inviteService";
+import { companyService } from "@/services/companyService";
+import { companyMembershipService } from "@/services/companyMembershipService";
+import { authService } from "@/services/authService";
 import { Invite } from "@/types/invite";
+import { Company } from "@/types/company";
+
+interface InviteWithCompany extends Invite {
+  company?: Company | null;
+}
 
 export default function OnboardingPage() {
   const router = useRouter();
-  const { user, isAuthenticated, loading } = useAuth();
-  const [invites, setInvites] = useState<Invite[]>([]);
+  const { user, isAuthenticated, loading, refreshAuth, userCompanies, company } = useAuth();
+  const [invites, setInvites] = useState<InviteWithCompany[]>([]);
   const [loadingInvites, setLoadingInvites] = useState(true);
 
   useEffect(() => {
@@ -18,6 +26,32 @@ export default function OnboardingPage() {
       router.push("/login");
     }
   }, [isAuthenticated, loading, router]);
+
+  // Verificar se usuário já tem empresas e redirecionar para dashboard
+  useEffect(() => {
+    const checkAndRedirect = async () => {
+      if (loading || !isAuthenticated || !user) return;
+      
+      // Se já tem empresas, redirecionar para dashboard
+      if (userCompanies.length > 0) {
+        // Se não tem empresa selecionada, selecionar a primeira
+        if (!company) {
+          try {
+            await authService.switchCompany(userCompanies[0].companyId);
+            await refreshAuth();
+            // Aguardar um pouco para garantir que o estado seja atualizado
+            await new Promise(resolve => setTimeout(resolve, 100));
+          } catch (error) {
+            console.error("Erro ao selecionar empresa:", error);
+          }
+        }
+        // Redirecionar para dashboard
+        window.location.href = "/dashboard";
+      }
+    };
+
+    checkAndRedirect();
+  }, [loading, isAuthenticated, user, userCompanies.length, company, refreshAuth]);
 
   useEffect(() => {
     const loadInvites = async () => {
@@ -28,7 +62,16 @@ export default function OnboardingPage() {
         // Expirar convites antigos primeiro
         await inviteService.expireOldInvites();
         const pendingInvites = await inviteService.findPendingByEmail(user.email);
-        setInvites(pendingInvites);
+        
+        // Buscar dados das empresas dos convites
+        const invitesWithCompanies = await Promise.all(
+          pendingInvites.map(async (invite) => {
+            const company = await companyService.findById(invite.companyId);
+            return { ...invite, company: company ?? undefined };
+          })
+        );
+        
+        setInvites(invitesWithCompanies);
       } catch (error) {
         console.error("Erro ao carregar convites:", error);
       } finally {
@@ -41,12 +84,29 @@ export default function OnboardingPage() {
     }
   }, [user]);
 
-  const handleAcceptInvite = async (invite: Invite) => {
+  const handleAcceptInvite = async (invite: InviteWithCompany) => {
+    if (!user || !invite.company) return;
+
     try {
+      // Aceitar convite
       await inviteService.accept(invite.token);
-      // Recarregar página para atualizar estado
-      router.refresh();
-      window.location.reload();
+
+      // Criar membership
+      await companyMembershipService.create({
+        userId: user.id,
+        companyId: invite.companyId,
+        role: invite.role,
+      });
+
+      // Selecionar empresa aceita e atualizar autenticação
+      await authService.switchCompany(invite.companyId);
+      await refreshAuth();
+      
+      // Aguardar um pouco para garantir que o estado seja atualizado
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // Usar window.location para forçar reload completo e garantir que o estado seja atualizado
+      window.location.href = "/dashboard";
     } catch (error: any) {
       alert(error.message || "Erro ao aceitar convite");
     }
@@ -167,7 +227,7 @@ export default function OnboardingPage() {
                   >
                     <div>
                       <p className="font-medium text-gray-900 dark:text-white">
-                        Convite para empresa
+                        {invite.company?.name || "Convite para empresa"}
                       </p>
                       <p className="text-sm text-gray-600 dark:text-gray-400">
                         Role: {invite.role} • Expira em:{" "}

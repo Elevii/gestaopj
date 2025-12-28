@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, FormEvent } from "react";
+import { useState, FormEvent, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
@@ -11,7 +11,7 @@ import { authService } from "@/services/authService";
 
 export default function CriarEmpresaPage() {
   const router = useRouter();
-  const { user, refreshAuth } = useAuth();
+  const { user, refreshAuth, switchCompany, userCompanies, company, loading, isAuthenticated } = useAuth();
   const [formData, setFormData] = useState({
     nomeEmpresa: "",
     cnpj: "",
@@ -24,6 +24,31 @@ export default function CriarEmpresaPage() {
     nomeEmpresa?: string;
     [key: string]: string | undefined;
   }>({});
+
+  // Verificar se usuário já tem empresas e redirecionar para dashboard
+  useEffect(() => {
+    const checkAndRedirect = async () => {
+      if (loading || !isAuthenticated || !user) return;
+      
+      // Se já tem empresas, redirecionar para dashboard
+      if (userCompanies.length > 0) {
+        // Se não tem empresa selecionada, selecionar a primeira
+        if (!company) {
+          try {
+            await authService.switchCompany(userCompanies[0].companyId);
+            await refreshAuth();
+            await new Promise(resolve => setTimeout(resolve, 100));
+          } catch (error) {
+            console.error("Erro ao selecionar empresa:", error);
+          }
+        }
+        // Redirecionar para dashboard
+        window.location.href = "/dashboard";
+      }
+    };
+
+    checkAndRedirect();
+  }, [loading, isAuthenticated, user, userCompanies.length, company, refreshAuth]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -82,9 +107,16 @@ export default function CriarEmpresaPage() {
         });
       }
 
-      // 4. Atualizar autenticação e redirecionar
+      // 4. Selecionar empresa criada e atualizar autenticação
+      // Usar authService diretamente para garantir que a sessão está disponível
+      await authService.switchCompany(empresa.id);
       await refreshAuth();
-      router.push("/dashboard");
+      
+      // Aguardar um pouco para garantir que o estado seja atualizado
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // Usar window.location para forçar reload completo e garantir que o estado seja atualizado
+      window.location.href = "/dashboard";
     } catch (error: any) {
       console.error("Erro ao criar empresa:", error);
       setErrors({

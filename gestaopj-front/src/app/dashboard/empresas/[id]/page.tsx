@@ -148,7 +148,7 @@ export default function EmpresaDetalhesPage() {
         membersData.push({
           ...membership,
           user,
-          settings,
+          settings: settings ?? undefined,
           horasMesAtual,
         });
       }

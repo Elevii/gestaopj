@@ -11,6 +11,7 @@ import {
 import { Atividade, CreateAtividadeDTO, StatusAtividade } from "@/types";
 import { atividadeService } from "@/services/atividadeService";
 import { useProjetos } from "./ProjetoContext";
+import { useCompany } from "@/contexts/CompanyContext";
 
 interface AtividadeContextType {
   atividades: Atividade[];
@@ -34,8 +35,9 @@ export function AtividadeProvider({ children }: { children: ReactNode }) {
   const [atividades, setAtividades] = useState<Atividade[]>([]);
   const [loading, setLoading] = useState(true);
   const { getProjetoById } = useProjetos();
+  const { company } = useCompany();
 
-  // Carrega todas as atividades do storage uma vez ao montar
+  // Carrega todas as atividades do storage uma vez ao montar e quando empresa mudar
   useEffect(() => {
     const loadAllAtividades = async () => {
       try {
@@ -50,7 +52,7 @@ export function AtividadeProvider({ children }: { children: ReactNode }) {
     };
 
     loadAllAtividades();
-  }, []);
+  }, [company?.id]);
 
   // Função vazia para manter compatibilidade (não precisa carregar por projeto se já tem tudo)
   const loadAtividadesByProjeto = useCallback(async (projetoId: string) => {

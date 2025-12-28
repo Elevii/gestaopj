@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useProjetos } from "@/contexts/ProjetoContext";
 import { useAtividades } from "@/contexts/AtividadeContext";
 import { useAtuacoes } from "@/contexts/AtuacaoContext";
+import { useCompany } from "@/contexts/CompanyContext";
 import { StatusAtividade, TipoAtuacao } from "@/types";
 import { formatTodayISODateLocal } from "@/utils/estimativas";
 
@@ -36,6 +37,7 @@ export default function NovaAtuacaoPage() {
   const { projetos } = useProjetos();
   const { getAtividadesByProjeto } = useAtividades();
   const { createAtuacao } = useAtuacoes();
+  const { company: activeCompany } = useCompany();
 
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<Errors>({});
@@ -226,6 +228,32 @@ export default function NovaAtuacaoPage() {
             </div>
           )}
 
+          {/* Empresa Ativa (Read-only) */}
+          <div>
+            <label
+              htmlFor="empresa"
+              className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+            >
+              Empresa <span className="text-red-500">*</span>
+            </label>
+            {activeCompany ? (
+              <input
+                id="empresa"
+                name="empresa"
+                type="text"
+                value={activeCompany.name}
+                readOnly
+                className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-700 dark:text-gray-300 cursor-not-allowed"
+              />
+            ) : (
+              <div className="w-full px-4 py-3 border border-yellow-300 dark:border-yellow-600 rounded-lg bg-yellow-50 dark:bg-yellow-900/20">
+                <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                  Nenhuma empresa selecionada. Selecione uma empresa no menu superior.
+                </p>
+              </div>
+            )}
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label
@@ -250,7 +278,7 @@ export default function NovaAtuacaoPage() {
                 <option value="">Selecione um projeto</option>
                 {projetos.map((p) => (
                   <option key={p.id} value={p.id}>
-                    {p.empresa} - {p.titulo}
+                    {p.titulo}
                   </option>
                 ))}
               </select>

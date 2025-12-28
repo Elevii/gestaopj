@@ -7,6 +7,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { inviteService } from "@/services/inviteService";
 import { companyService } from "@/services/companyService";
 import { companyMembershipService } from "@/services/companyMembershipService";
+import { authService } from "@/services/authService";
 import { Invite } from "@/types/invite";
 import { Company } from "@/types/company";
 
@@ -16,9 +17,34 @@ interface InviteWithCompany extends Invite {
 
 export default function ConvitesPage() {
   const router = useRouter();
-  const { user, refreshAuth } = useAuth();
+  const { user, refreshAuth, userCompanies, company, loading: authLoading, isAuthenticated } = useAuth();
   const [invites, setInvites] = useState<InviteWithCompany[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Verificar se usuário já tem empresas e redirecionar para dashboard
+  useEffect(() => {
+    const checkAndRedirect = async () => {
+      if (authLoading || !isAuthenticated || !user) return;
+      
+      // Se já tem empresas, redirecionar para dashboard
+      if (userCompanies.length > 0) {
+        // Se não tem empresa selecionada, selecionar a primeira
+        if (!company) {
+          try {
+            await authService.switchCompany(userCompanies[0].companyId);
+            await refreshAuth();
+            await new Promise(resolve => setTimeout(resolve, 100));
+          } catch (error) {
+            console.error("Erro ao selecionar empresa:", error);
+          }
+        }
+        // Redirecionar para dashboard
+        window.location.href = "/dashboard";
+      }
+    };
+
+    checkAndRedirect();
+  }, [authLoading, isAuthenticated, user, userCompanies.length, company, refreshAuth]);
 
   useEffect(() => {
     const loadInvites = async () => {
@@ -34,7 +60,7 @@ export default function ConvitesPage() {
         const invitesWithCompanies = await Promise.all(
           pendingInvites.map(async (invite) => {
             const company = await companyService.findById(invite.companyId);
-            return { ...invite, company };
+            return { ...invite, company: company ?? undefined };
           })
         );
 
@@ -65,9 +91,15 @@ export default function ConvitesPage() {
         role: invite.role,
       });
 
-      // Atualizar autenticação e redirecionar
+      // Selecionar empresa aceita e atualizar autenticação
+      await authService.switchCompany(invite.companyId);
       await refreshAuth();
-      router.push("/dashboard");
+      
+      // Aguardar um pouco para garantir que o estado seja atualizado
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // Usar window.location para forçar reload completo e garantir que o estado seja atualizado
+      window.location.href = "/dashboard";
     } catch (error: any) {
       alert(error.message || "Erro ao aceitar convite");
     }

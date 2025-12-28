@@ -10,6 +10,7 @@ import {
 } from "react";
 import { CreateFaturaDTO, Fatura, UpdateFaturaDTO } from "@/types";
 import { faturaService } from "@/services/faturaService";
+import { useCompany } from "@/contexts/CompanyContext";
 
 interface FaturamentoContextType {
   faturas: Fatura[];
@@ -32,6 +33,7 @@ const FaturamentoContext = createContext<FaturamentoContextType | undefined>(und
 export function FaturamentoProvider({ children }: { children: ReactNode }) {
   const [faturas, setFaturas] = useState<Fatura[]>([]);
   const [loading, setLoading] = useState(true);
+  const { company } = useCompany();
   const [resumo, setResumo] = useState({
     recebidoMes: 0,
     aReceber: 0,
@@ -41,8 +43,9 @@ export function FaturamentoProvider({ children }: { children: ReactNode }) {
   const refreshFaturas = useCallback(async () => {
     try {
       setLoading(true);
-      const all = await faturaService.findAll();
-      const res = await faturaService.getResumoFinanceiro();
+      const companyId = company?.id;
+      const all = await faturaService.findAll(companyId);
+      const res = await faturaService.getResumoFinanceiro(companyId);
       setFaturas(all);
       setResumo(res);
     } catch (error) {
@@ -50,7 +53,7 @@ export function FaturamentoProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [company?.id]);
 
   useEffect(() => {
     refreshFaturas();
