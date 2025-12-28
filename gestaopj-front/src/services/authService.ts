@@ -2,8 +2,10 @@ import { User, LoginDTO } from "@/types/user";
 import { userService } from "./userService";
 import { companyService } from "./companyService";
 import { subscriptionService } from "./subscriptionService";
+import { companyMembershipService } from "./companyMembershipService";
 import { Company } from "@/types/company";
 import { Subscription, PlanLimits } from "@/types/subscription";
+import { CompanyMembership } from "@/types/companyMembership";
 
 const SESSION_KEY = "gestaopj_session";
 const CURRENT_USER_KEY = "gestaopj_current_user";
@@ -11,7 +13,7 @@ const CURRENT_COMPANY_KEY = "gestaopj_current_company";
 
 interface Session {
   userId: string;
-  companyId: string;
+  companyId?: string; // Opcional - pode não ter empresa selecionada
   expiresAt: string;
 }
 
@@ -58,7 +60,8 @@ class AuthService {
 
   async login(credentials: LoginDTO): Promise<{
     user: User;
-    company: Company;
+    companies: CompanyMembership[];
+    company: Company | null;
     subscription: Subscription | null;
     limits: PlanLimits | null;
   }> {
@@ -75,7 +78,16 @@ class AuthService {
     }
 
     // Verificar senha (simulação - em produção isso deve ser feito no backend)
-    const passwordMatch = btoa(credentials.password) === user.passwordHash;
+    // Tentar verificar com hash atual primeiro
+    let passwordMatch = btoa(credentials.password) === user.passwordHash;
+    
+    // Se não funcionar, pode ser hash antigo (compatibilidade)
+    if (!passwordMatch) {
+      // Tentar verificação alternativa para dados antigos
+      passwordMatch = credentials.password === user.passwordHash || 
+                     btoa(credentials.password) === user.passwordHash;
+    }
+    
     if (!passwordMatch) {
       throw new Error("Email ou senha inválidos");
     }
@@ -83,23 +95,29 @@ class AuthService {
     // Atualizar último login
     await userService.update(user.id, {});
 
-    // Buscar empresa
-    const company = await companyService.findById(user.companyId);
-    if (!company) {
-      throw new Error("Empresa não encontrada");
-    }
+    // Buscar empresas do usuário
+    const memberships = await companyMembershipService.findByUserId(user.id);
+    
+    // Buscar dados completos das empresas
+    const companiesData: CompanyMembership[] = [];
+    let defaultCompany: Company | null = null;
+    let subscription: Subscription | null = null;
+    let limits: PlanLimits | null = null;
 
-    if (!company.active) {
-      throw new Error("Empresa inativa");
-    }
+    if (memberships.length > 0) {
+      // Selecionar primeira empresa como padrão (ou a última acessada)
+      const defaultMembership = memberships[0];
+      defaultCompany = await companyService.findById(defaultMembership.companyId);
+      
+      if (defaultCompany && defaultCompany.active) {
+        subscription = await subscriptionService.findByCompanyId(defaultCompany.id);
+        limits = subscription
+          ? await subscriptionService.getCompanyLimits(defaultCompany.id)
+          : null;
+      }
 
-    // Buscar assinatura e limites
-    const subscription = await subscriptionService.findByCompanyId(
-      company.id
-    );
-    const limits = subscription
-      ? await subscriptionService.getCompanyLimits(company.id)
-      : null;
+      companiesData.push(...memberships);
+    }
 
     // Criar sessão (expira em 7 dias)
     const expiresAt = new Date();
@@ -107,7 +125,7 @@ class AuthService {
 
     const session: Session = {
       userId: user.id,
-      companyId: company.id,
+      companyId: defaultCompany?.id,
       expiresAt: expiresAt.toISOString(),
     };
 
@@ -115,11 +133,14 @@ class AuthService {
 
     // Salvar dados atuais no localStorage para acesso rápido
     localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(user));
-    localStorage.setItem(CURRENT_COMPANY_KEY, JSON.stringify(company));
+    if (defaultCompany) {
+      localStorage.setItem(CURRENT_COMPANY_KEY, JSON.stringify(defaultCompany));
+    }
 
     return {
       user,
-      company,
+      companies: companiesData,
+      company: defaultCompany,
       subscription,
       limits,
     };
@@ -154,7 +175,7 @@ class AuthService {
 
   async getCurrentCompany(): Promise<Company | null> {
     const session = this.getSession();
-    if (!session) return null;
+    if (!session || !session.companyId) return null;
 
     try {
       const stored = localStorage.getItem(CURRENT_COMPANY_KEY);
@@ -174,6 +195,63 @@ class AuthService {
     }
   }
 
+  async getUserCompanies(userId: string): Promise<CompanyMembership[]> {
+    return await companyMembershipService.findByUserId(userId);
+  }
+
+  async switchCompany(companyId: string): Promise<{
+    company: Company;
+    subscription: Subscription | null;
+    limits: PlanLimits | null;
+  }> {
+    const session = this.getSession();
+    if (!session) {
+      throw new Error("Usuário não autenticado");
+    }
+
+    // Verificar se usuário tem membership nesta empresa
+    const membership = await companyMembershipService.findByUserAndCompany(
+      session.userId,
+      companyId
+    );
+
+    if (!membership) {
+      throw new Error("Usuário não é membro desta empresa");
+    }
+
+    const company = await companyService.findById(companyId);
+    if (!company || !company.active) {
+      throw new Error("Empresa não encontrada ou inativa");
+    }
+
+    // Atualizar sessão
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 7);
+
+    const updatedSession: Session = {
+      ...session,
+      companyId: company.id,
+      expiresAt: expiresAt.toISOString(),
+    };
+
+    this.saveSession(updatedSession);
+
+    // Buscar assinatura e limites
+    const subscription = await subscriptionService.findByCompanyId(company.id);
+    const limits = subscription
+      ? await subscriptionService.getCompanyLimits(company.id)
+      : null;
+
+    // Salvar no cache
+    localStorage.setItem(CURRENT_COMPANY_KEY, JSON.stringify(company));
+
+    return {
+      company,
+      subscription,
+      limits,
+    };
+  }
+
   async getCurrentSubscription(): Promise<Subscription | null> {
     const company = await this.getCurrentCompany();
     if (!company) return null;
@@ -189,7 +267,16 @@ class AuthService {
   }
 
   isAuthenticated(): boolean {
-    return this.getSession() !== null;
+    const session = this.getSession();
+    return session !== null;
+  }
+
+  async needsOnboarding(): Promise<boolean> {
+    const session = this.getSession();
+    if (!session) return false;
+
+    const memberships = await companyMembershipService.findByUserId(session.userId);
+    return memberships.length === 0;
   }
 
   async refreshSession(): Promise<void> {

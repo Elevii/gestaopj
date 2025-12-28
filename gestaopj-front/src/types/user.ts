@@ -1,12 +1,10 @@
-export type UserRole = "owner" | "admin" | "member";
+export type UserRole = "owner" | "admin" | "member" | "viewer";
 
 export interface User {
   id: string;
-  companyId: string;
   email: string;
   name: string;
   passwordHash: string; // Em produção, nunca deve ser exposto ao frontend
-  role: UserRole;
   active: boolean;
   lastLoginAt?: string;
   createdAt: string;
@@ -14,11 +12,9 @@ export interface User {
 }
 
 export interface CreateUserDTO {
-  companyId: string;
   email: string;
   name: string;
   password: string;
-  role?: UserRole;
   active?: boolean;
 }
 

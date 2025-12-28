@@ -12,6 +12,7 @@ import {
 import { Atuacao, CreateAtuacaoDTO, StatusAtividade } from "@/types";
 import { atuacaoService } from "@/services/atuacaoService";
 import { useAtividades } from "@/contexts/AtividadeContext";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface AtuacaoContextType {
   atuacoes: Atuacao[];
@@ -39,6 +40,7 @@ export function AtuacaoProvider({ children }: { children: ReactNode }) {
   const [atuacoes, setAtuacoes] = useState<Atuacao[]>([]);
   const [loading, setLoading] = useState(true);
   const { atividades, updateAtividade } = useAtividades();
+  const { user } = useAuth();
 
   const refreshAtuacoes = useCallback(async () => {
     try {
@@ -96,7 +98,12 @@ export function AtuacaoProvider({ children }: { children: ReactNode }) {
 
   const createAtuacao = useCallback(
     async (data: CreateAtuacaoDTO): Promise<Atuacao> => {
-      const nova = await atuacaoService.create(data);
+      // Adicionar userId se não estiver presente
+      const dataWithUserId = {
+        ...data,
+        userId: data.userId || user?.id,
+      };
+      const nova = await atuacaoService.create(dataWithUserId);
       const all = await atuacaoService.findAll();
       setAtuacoes(all);
 
@@ -107,7 +114,7 @@ export function AtuacaoProvider({ children }: { children: ReactNode }) {
       });
       return nova;
     },
-    [syncAtividadeHorasEStatus]
+    [syncAtividadeHorasEStatus, user]
   );
 
   const updateAtuacao = useCallback(

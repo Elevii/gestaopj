@@ -60,13 +60,27 @@ export default function LoginForm() {
     // Login usando authService
     setIsLoading(true);
     try {
-      await authService.login({ email, password });
-      // Redirecionar para o dashboard após login bem-sucedido
-      router.push("/dashboard");
+      const result = await authService.login({ email, password });
+      // Redirecionar baseado em se usuário tem empresas
+      if (result.companies.length > 0) {
+        router.push("/dashboard");
+      } else {
+        router.push("/onboarding");
+      }
     } catch (error: any) {
-      console.error("Erro no login:", error);
+      // Erros esperados (credenciais inválidas, usuário inativo) não precisam ser logados
+      const expectedErrors = [
+        "Email ou senha inválidos",
+        "Usuário inativo"
+      ];
+      
+      if (!expectedErrors.includes(error?.message)) {
+        // Apenas logar erros inesperados
+        console.error("Erro inesperado no login:", error);
+      }
+      
       setErrors({
-        email: error.message || "Credenciais inválidas. Tente novamente.",
+        email: error?.message || "Credenciais inválidas. Tente novamente.",
       });
     } finally {
       setIsLoading(false);

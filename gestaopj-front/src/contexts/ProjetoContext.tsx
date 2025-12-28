@@ -30,10 +30,37 @@ export function ProjetoProvider({ children }: { children: ReactNode }) {
   const loadProjetos = async () => {
     try {
       setLoading(true);
-      const data = await projetoService.findAll();
-      setProjetos(data);
+      const currentUser = await authService.getCurrentUser();
+      
+      if (!currentUser) {
+        setProjetos([]);
+        return;
+      }
+
+      // Buscar projetos de todas as empresas onde o usuário é membro
+      const userCompanies = await authService.getUserCompanies(currentUser.id);
+      
+      if (userCompanies.length === 0) {
+        setProjetos([]);
+        return;
+      }
+
+      // Buscar projetos de cada empresa onde o usuário é membro
+      const allProjetos: Projeto[] = [];
+      for (const membership of userCompanies) {
+        const projetosDaEmpresa = await projetoService.findAll(membership.companyId);
+        allProjetos.push(...projetosDaEmpresa);
+      }
+
+      // Remover duplicatas (caso algum projeto apareça em múltiplas buscas)
+      const projetosUnicos = Array.from(
+        new Map(allProjetos.map((p) => [p.id, p])).values()
+      );
+
+      setProjetos(projetosUnicos);
     } catch (error) {
       console.error("Erro ao carregar projetos:", error);
+      setProjetos([]);
     } finally {
       setLoading(false);
     }

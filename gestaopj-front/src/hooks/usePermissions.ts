@@ -1,37 +1,24 @@
 import { useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useCompany } from "@/contexts/CompanyContext";
 import {
   Permission,
-  hasPermission,
-  canCreateProject,
-  canEditProject,
-  canDeleteProject,
-  canManageUsers,
-  canInviteUsers,
-  canRemoveUsers,
-  canChangeUserRoles,
-  canAccessBilling,
-  canChangePlan,
-  canCancelSubscription,
-  canEditCompany,
-  canTransferOwnership,
-  canCancelCompany,
-  canManageSettings,
-  canViewReports,
-  canExportData,
-  canCreateBudget,
-  canEditBudget,
-  canDeleteBudget,
-  canCreateInvoice,
-  canEditInvoice,
-  canDeleteInvoice,
-} from "@/utils/permissions";
+  roleHasPermission,
+} from "@/types/permissions";
+import { UserRole } from "@/types/user";
 
 export function usePermissions() {
-  const { user } = useAuth();
+  const { user, userCompanies } = useAuth();
+  const { company } = useCompany();
+
+  const currentRole = useMemo<UserRole | null>(() => {
+    if (!user || !company) return null;
+    const membership = userCompanies.find((m) => m.companyId === company.id);
+    return membership?.role || null;
+  }, [user, company, userCompanies]);
 
   const permissions = useMemo(() => {
-    if (!user) {
+    if (!user || !currentRole)
       return {
         hasPermission: () => false,
         canCreateProject: false,
@@ -57,35 +44,34 @@ export function usePermissions() {
         canEditInvoice: false,
         canDeleteInvoice: false,
       };
-    }
 
     return {
       hasPermission: (permission: Permission) =>
-        hasPermission(user, permission),
-      canCreateProject: canCreateProject(user),
-      canEditProject: canEditProject(user),
-      canDeleteProject: canDeleteProject(user),
-      canManageUsers: canManageUsers(user),
-      canInviteUsers: canInviteUsers(user),
-      canRemoveUsers: canRemoveUsers(user),
-      canChangeUserRoles: canChangeUserRoles(user),
-      canAccessBilling: canAccessBilling(user),
-      canChangePlan: canChangePlan(user),
-      canCancelSubscription: canCancelSubscription(user),
-      canEditCompany: canEditCompany(user),
-      canTransferOwnership: canTransferOwnership(user),
-      canCancelCompany: canCancelCompany(user),
-      canManageSettings: canManageSettings(user),
-      canViewReports: canViewReports(user),
-      canExportData: canExportData(user),
-      canCreateBudget: canCreateBudget(user),
-      canEditBudget: canEditBudget(user),
-      canDeleteBudget: canDeleteBudget(user),
-      canCreateInvoice: canCreateInvoice(user),
-      canEditInvoice: canEditInvoice(user),
-      canDeleteInvoice: canDeleteInvoice(user),
+        roleHasPermission(currentRole, permission),
+      canCreateProject: roleHasPermission(currentRole, Permission.CREATE_PROJECT),
+      canEditProject: roleHasPermission(currentRole, Permission.EDIT_PROJECT),
+      canDeleteProject: roleHasPermission(currentRole, Permission.DELETE_PROJECT),
+      canManageUsers: roleHasPermission(currentRole, Permission.MANAGE_USERS),
+      canInviteUsers: roleHasPermission(currentRole, Permission.INVITE_USERS),
+      canRemoveUsers: roleHasPermission(currentRole, Permission.REMOVE_USERS),
+      canChangeUserRoles: roleHasPermission(currentRole, Permission.CHANGE_USER_ROLES),
+      canAccessBilling: roleHasPermission(currentRole, Permission.ACCESS_BILLING),
+      canChangePlan: roleHasPermission(currentRole, Permission.CHANGE_PLAN),
+      canCancelSubscription: roleHasPermission(currentRole, Permission.CANCEL_SUBSCRIPTION),
+      canEditCompany: roleHasPermission(currentRole, Permission.EDIT_COMPANY),
+      canTransferOwnership: roleHasPermission(currentRole, Permission.TRANSFER_OWNERSHIP),
+      canCancelCompany: roleHasPermission(currentRole, Permission.CANCEL_COMPANY),
+      canManageSettings: roleHasPermission(currentRole, Permission.MANAGE_SETTINGS),
+      canViewReports: roleHasPermission(currentRole, Permission.VIEW_REPORTS),
+      canExportData: roleHasPermission(currentRole, Permission.EXPORT_DATA),
+      canCreateBudget: roleHasPermission(currentRole, Permission.CREATE_BUDGET),
+      canEditBudget: roleHasPermission(currentRole, Permission.EDIT_BUDGET),
+      canDeleteBudget: roleHasPermission(currentRole, Permission.DELETE_BUDGET),
+      canCreateInvoice: roleHasPermission(currentRole, Permission.CREATE_INVOICE),
+      canEditInvoice: roleHasPermission(currentRole, Permission.EDIT_INVOICE),
+      canDeleteInvoice: roleHasPermission(currentRole, Permission.DELETE_INVOICE),
     };
-  }, [user]);
+  }, [user, currentRole]);
 
   return permissions;
 }

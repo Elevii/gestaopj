@@ -67,6 +67,10 @@ export interface Atuacao {
   projetoId: string;
   atividadeId: string;
   /**
+   * ID do usuário que registrou a atuação
+   */
+  userId?: string;
+  /**
    * Data da atuação no formato ISO date (YYYY-MM-DD)
    */
   data: string;
@@ -101,6 +105,7 @@ export interface Atuacao {
 export interface CreateAtuacaoDTO {
   projetoId: string;
   atividadeId: string;
+  userId?: string;
   data: string;
   horarioInicio?: string;
   horasEstimadasNoRegistro: number;

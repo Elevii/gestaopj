@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Sidebar from "@/components/dashboard/Sidebar";
 import Header from "@/components/dashboard/Header";
-import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { CompanyProvider } from "@/contexts/CompanyContext";
 import { ProjetoProvider } from "@/contexts/ProjetoContext";
 import { AtividadeProvider } from "@/contexts/AtividadeContext";
@@ -13,7 +13,7 @@ import { OrcamentoProvider } from "@/contexts/OrcamentoContext";
 import { FaturamentoProvider } from "@/contexts/FaturamentoContext";
 
 function DashboardContent({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, loading } = useAuth();
+  const { isAuthenticated, needsOnboarding, loading } = useAuth();
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -22,6 +22,12 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
       router.push("/login");
     }
   }, [isAuthenticated, loading, router]);
+
+  useEffect(() => {
+    if (!loading && isAuthenticated && needsOnboarding) {
+      router.push("/onboarding");
+    }
+  }, [loading, isAuthenticated, needsOnboarding, router]);
 
   if (loading) {
     return (
@@ -34,7 +40,7 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (!isAuthenticated) {
+  if (!isAuthenticated || needsOnboarding) {
     return null;
   }
 
@@ -71,10 +77,7 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  return (
-    <AuthProvider>
-      <DashboardContent>{children}</DashboardContent>
-    </AuthProvider>
-  );
+  // AuthProvider já está no layout raiz, não precisa aqui
+  return <DashboardContent>{children}</DashboardContent>;
 }
 

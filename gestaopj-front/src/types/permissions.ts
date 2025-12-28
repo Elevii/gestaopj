@@ -70,7 +70,7 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     Permission.DELETE_INVOICE,
   ],
   admin: [
-    // Gestão operacional completa (sem billing)
+    // Gestão operacional completa (sem billing e transferência)
     Permission.CREATE_PROJECT,
     Permission.EDIT_PROJECT,
     Permission.DELETE_PROJECT,
@@ -89,20 +89,31 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     Permission.CREATE_INVOICE,
     Permission.EDIT_INVOICE,
     Permission.DELETE_INVOICE,
+    // Nota: ADMIN não tem CHANGE_PLAN, CANCEL_SUBSCRIPTION, TRANSFER_OWNERSHIP
   ],
   member: [
     // Acesso limitado
+    Permission.VIEW_PROJECTS,
+    Permission.VIEW_REPORTS,
+    Permission.CREATE_PROJECT,
+    Permission.EDIT_PROJECT,
+  ],
+  viewer: [
+    // Apenas visualização
     Permission.VIEW_PROJECTS,
     Permission.VIEW_REPORTS,
   ],
 };
 
 /**
- * Verifica se um usuário tem uma permissão específica
+ * Verifica se um usuário tem uma permissão específica (deprecated - use roleHasPermission)
+ * @deprecated Use roleHasPermission com o role da membership
  */
 export function hasPermission(user: User, permission: Permission): boolean {
-  const userPermissions = ROLE_PERMISSIONS[user.role] || [];
-  return userPermissions.includes(permission);
+  // Esta função não funciona mais porque User não tem role
+  // Mantida apenas para compatibilidade - deve ser substituída
+  console.warn("hasPermission(user, permission) está deprecated. Use roleHasPermission(role, permission)");
+  return false;
 }
 
 /**

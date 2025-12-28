@@ -3,16 +3,13 @@
 import { useState, FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { companyService } from "@/services/companyService";
 import { userService } from "@/services/userService";
-import { subscriptionService } from "@/services/subscriptionService";
 import { authService } from "@/services/authService";
 
 export default function CadastroPage() {
   const router = useRouter();
   const [formData, setFormData] = useState({
     nome: "",
-    nomeEmpresa: "",
     email: "",
     password: "",
     confirmPassword: "",
@@ -22,7 +19,6 @@ export default function CadastroPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<{
     nome?: string;
-    nomeEmpresa?: string;
     email?: string;
     password?: string;
     confirmPassword?: string;
@@ -57,7 +53,6 @@ export default function CadastroPage() {
     // Validação
     const newErrors: {
       nome?: string;
-      nomeEmpresa?: string;
       email?: string;
       password?: string;
       confirmPassword?: string;
@@ -68,13 +63,6 @@ export default function CadastroPage() {
       newErrors.nome = "Nome completo é obrigatório";
     } else if (formData.nome.trim().length < 3) {
       newErrors.nome = "Nome deve ter no mínimo 3 caracteres";
-    }
-
-    // Validação do nome da empresa
-    if (!formData.nomeEmpresa.trim()) {
-      newErrors.nomeEmpresa = "Nome da empresa é obrigatório";
-    } else if (formData.nomeEmpresa.trim().length < 3) {
-      newErrors.nomeEmpresa = "Nome da empresa deve ter no mínimo 3 caracteres";
     }
 
     // Validação do email
@@ -104,43 +92,28 @@ export default function CadastroPage() {
       return;
     }
 
-    // Criar empresa e usuário Owner simultaneamente
+    // Criar apenas o usuário
     setIsLoading(true);
     try {
-      // 1. Criar empresa
-      const empresa = await companyService.create({
-        name: formData.nomeEmpresa,
-      });
-
-      // 2. Criar usuário Owner
-      const usuario = await userService.create({
-        companyId: empresa.id,
+      // Criar usuário
+      await userService.create({
         email: formData.email,
         name: formData.nome,
         password: formData.password,
-        role: "owner",
       });
-
-      // 3. Criar assinatura padrão (plano gratuito)
-      const planFree = await subscriptionService.getPlanBySlug("free");
-      if (planFree) {
-        await subscriptionService.create({
-          companyId: empresa.id,
-          planId: planFree.id,
-          status: "active",
-        });
-      }
 
       setSuccess(true);
 
-      // Fazer login automático e redirecionar para dashboard
+      // Fazer login automático e redirecionar para onboarding
       setTimeout(async () => {
         try {
           await authService.login({
             email: formData.email,
             password: formData.password,
           });
-          router.push("/dashboard");
+
+          // Sempre redirecionar para onboarding, pois não tem empresa ainda
+          router.push("/onboarding");
         } catch (loginError) {
           // Se login falhar, redirecionar para página de login
           router.push("/login?cadastro=sucesso");
@@ -246,36 +219,6 @@ export default function CadastroPage() {
               )}
             </div>
 
-            {/* Nome Empresa Field */}
-            <div>
-              <label
-                htmlFor="nomeEmpresa"
-                className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
-              >
-                Nome da Empresa
-              </label>
-              <input
-                id="nomeEmpresa"
-                name="nomeEmpresa"
-                type="text"
-                autoComplete="organization"
-                required
-                value={formData.nomeEmpresa}
-                onChange={handleChange}
-                className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400 ${
-                  errors.nomeEmpresa
-                    ? "border-red-500 focus:ring-red-500 focus:border-red-500"
-                    : "border-gray-300"
-                }`}
-                placeholder="Minha Empresa LTDA"
-              />
-              {errors.nomeEmpresa && (
-                <p className="mt-1 text-sm text-red-600 dark:text-red-400">
-                  {errors.nomeEmpresa}
-                </p>
-              )}
-            </div>
-
             {/* Email Field */}
             <div>
               <label
@@ -334,9 +277,7 @@ export default function CadastroPage() {
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 focus:outline-none"
-                  aria-label={
-                    showPassword ? "Ocultar senha" : "Mostrar senha"
-                  }
+                  aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
                 >
                   {showPassword ? (
                     <svg
@@ -411,9 +352,7 @@ export default function CadastroPage() {
                 />
                 <button
                   type="button"
-                  onClick={() =>
-                    setShowConfirmPassword(!showConfirmPassword)
-                  }
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 focus:outline-none"
                   aria-label={
                     showConfirmPassword
@@ -562,4 +501,3 @@ export default function CadastroPage() {
     </div>
   );
 }
-

@@ -5,7 +5,10 @@ import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 import { useProjetos } from "@/contexts/ProjetoContext";
 import { useConfiguracoes } from "@/contexts/ConfiguracoesContext";
-import { StatusProjeto } from "@/types";
+import { useAuth } from "@/contexts/AuthContext";
+import { companyService } from "@/services/companyService";
+import { Company } from "@/types/company";
+import { StatusProjeto, TipoCobranca } from "@/types";
 
 export default function EditarProjetoPage() {
   const router = useRouter();
@@ -13,35 +16,93 @@ export default function EditarProjetoPage() {
   const projetoId = params.id as string;
   const { getProjetoById, updateProjeto } = useProjetos();
   const { configuracoes } = useConfiguracoes();
+  const { userCompanies } = useAuth();
   const projeto = getProjetoById(projetoId);
 
   const [isLoading, setIsLoading] = useState(false);
+  const [availableCompanies, setAvailableCompanies] = useState<Company[]>([]);
+  const [loadingCompanies, setLoadingCompanies] = useState(true);
   const [errors, setErrors] = useState<{
     empresa?: string;
     titulo?: string;
     valorHora?: string;
+    valorFixo?: string;
     horasUteisPorDia?: string;
   }>({});
 
   const [formData, setFormData] = useState({
     empresa: "",
     titulo: "",
+    tipoCobranca: "horas" as "horas" | "fixo",
     valorHora: "",
+    valorFixo: "",
     horasUteisPorDia: "8",
     status: "ativo" as StatusProjeto,
   });
 
+  // Carregar empresas onde usuário é Owner ou Admin
   useEffect(() => {
-    if (projeto) {
+    const loadCompanies = async () => {
+      try {
+        setLoadingCompanies(true);
+        // Filtrar apenas empresas onde usuário é owner ou admin
+        const ownerOrAdminMemberships = userCompanies.filter(
+          (membership) => membership.role === "owner" || membership.role === "admin"
+        );
+
+        // Buscar dados completos das empresas
+        const companies = await Promise.all(
+          ownerOrAdminMemberships.map((membership) =>
+            companyService.findById(membership.companyId)
+          )
+        );
+
+        const validCompanies = companies.filter(
+          (c): c is Company => c !== null && c.active
+        );
+
+        setAvailableCompanies(validCompanies);
+      } catch (error) {
+        console.error("Erro ao carregar empresas:", error);
+      } finally {
+        setLoadingCompanies(false);
+      }
+    };
+
+    if (userCompanies.length > 0) {
+      loadCompanies();
+    }
+  }, [userCompanies]);
+
+  useEffect(() => {
+    if (projeto && availableCompanies.length > 0) {
+      // Tentar encontrar empresa pelo companyId primeiro
+      let selectedCompanyId = projeto.companyId;
+      
+      // Se não tiver companyId, tentar encontrar pelo nome
+      if (!selectedCompanyId) {
+        const foundCompany = availableCompanies.find(
+          (c) => c.name === projeto.empresa
+        );
+        selectedCompanyId = foundCompany?.id || "";
+      }
+
+      // Se ainda não encontrou, usar a primeira disponível
+      if (!selectedCompanyId && availableCompanies.length > 0) {
+        selectedCompanyId = availableCompanies[0].id;
+      }
+
       setFormData({
-        empresa: projeto.empresa,
+        empresa: selectedCompanyId || projeto.empresa,
         titulo: projeto.titulo,
+        tipoCobranca: projeto.tipoCobranca || "horas",
         valorHora: (projeto.valorHora ?? 0).toFixed(2).replace(".", ","),
+        valorFixo: (projeto.valorFixo ?? 0).toFixed(2).replace(".", ","),
         horasUteisPorDia: String(projeto.horasUteisPorDia ?? 8).replace(".", ","),
         status: projeto.status ?? "ativo",
       });
     }
-  }, [projeto]);
+  }, [projeto, availableCompanies]);
 
   if (!projeto) {
     return (
@@ -106,11 +167,12 @@ export default function EditarProjetoPage() {
       empresa?: string;
       titulo?: string;
       valorHora?: string;
+      valorFixo?: string;
       horasUteisPorDia?: string;
     } = {};
 
-    if (!formData.empresa.trim()) {
-      newErrors.empresa = "Empresa contratante é obrigatória";
+    if (!formData.empresa) {
+      newErrors.empresa = "Selecione uma empresa";
     }
 
     if (!formData.titulo.trim()) {
@@ -119,12 +181,27 @@ export default function EditarProjetoPage() {
       newErrors.titulo = "Título deve ter no mínimo 3 caracteres";
     }
 
-    if (!formData.valorHora) {
-      newErrors.valorHora = "Valor por hora é obrigatório";
-    } else {
-      const valor = parseCurrency(formData.valorHora);
-      if (valor <= 0) {
-        newErrors.valorHora = "Valor deve ser maior que zero";
+    // Validar valor por hora apenas se tipo de cobrança for "horas"
+    if (formData.tipoCobranca === "horas") {
+      if (!formData.valorHora) {
+        newErrors.valorHora = "Valor por hora é obrigatório";
+      } else {
+        const valor = parseCurrency(formData.valorHora);
+        if (valor <= 0) {
+          newErrors.valorHora = "Valor deve ser maior que zero";
+        }
+      }
+    }
+
+    // Validar valor fixo apenas se tipo de cobrança for "fixo"
+    if (formData.tipoCobranca === "fixo") {
+      if (!formData.valorFixo) {
+        newErrors.valorFixo = "Valor fixo é obrigatório";
+      } else {
+        const valor = parseCurrency(formData.valorFixo);
+        if (valor <= 0) {
+          newErrors.valorFixo = "Valor deve ser maior que zero";
+        }
       }
     }
 
@@ -142,10 +219,21 @@ export default function EditarProjetoPage() {
 
     setIsLoading(true);
     try {
+      // Buscar nome da empresa selecionada
+      const selectedCompany = availableCompanies.find((c) => c.id === formData.empresa);
+      if (!selectedCompany) {
+        setErrors({ empresa: "Empresa selecionada não encontrada" });
+        setIsLoading(false);
+        return;
+      }
+
       await updateProjeto(projetoId, {
-        empresa: formData.empresa.trim(),
+        companyId: formData.empresa,
+        empresa: selectedCompany.name,
         titulo: formData.titulo.trim(),
-        valorHora: parseCurrency(formData.valorHora),
+        tipoCobranca: formData.tipoCobranca,
+        valorHora: formData.tipoCobranca === "horas" ? parseCurrency(formData.valorHora) : undefined,
+        valorFixo: formData.tipoCobranca === "fixo" ? parseCurrency(formData.valorFixo) : undefined,
         horasUteisPorDia: parseHorasUteis(formData.horasUteisPorDia),
         status: formData.status,
       });
@@ -197,32 +285,82 @@ export default function EditarProjetoPage() {
       {/* Form */}
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 md:p-8">
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Empresa Contratante */}
+          {/* Selecionar Empresa */}
           <div>
             <label
               htmlFor="empresa"
               className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
             >
-              Empresa Contratante <span className="text-red-500">*</span>
+              Selecionar Empresa <span className="text-red-500">*</span>
             </label>
-            <input
-              id="empresa"
-              name="empresa"
-              type="text"
-              required
-              value={formData.empresa}
-              onChange={handleChange}
-              className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400 ${
-                errors.empresa
-                  ? "border-red-500 focus:ring-red-500 focus:border-red-500"
-                  : "border-gray-300"
-              }`}
-              placeholder="Nome da empresa cliente"
-            />
-            {errors.empresa && (
-              <p className="mt-1 text-sm text-red-600 dark:text-red-400">
-                {errors.empresa}
-              </p>
+            {loadingCompanies ? (
+              <div className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 flex items-center">
+                <svg
+                  className="animate-spin h-5 w-5 text-gray-400 mr-2"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  ></circle>
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  ></path>
+                </svg>
+                <span className="text-gray-500 dark:text-gray-400">Carregando empresas...</span>
+              </div>
+            ) : availableCompanies.length === 0 ? (
+              <div className="w-full px-4 py-3 border border-yellow-300 dark:border-yellow-600 rounded-lg bg-yellow-50 dark:bg-yellow-900/20">
+                <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                  Você precisa ser Owner ou Admin de pelo menos uma empresa para editar projetos.
+                </p>
+              </div>
+            ) : (
+              <>
+                <select
+                  id="empresa"
+                  name="empresa"
+                  required
+                  value={formData.empresa}
+                  onChange={handleChange}
+                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors dark:bg-gray-700 dark:border-gray-600 dark:text-white ${
+                    errors.empresa
+                      ? "border-red-500 focus:ring-red-500 focus:border-red-500"
+                      : "border-gray-300"
+                  }`}
+                >
+                  <option value="">Selecione uma empresa</option>
+                  {availableCompanies.map((comp) => {
+                    const membership = userCompanies.find(
+                      (m) => m.companyId === comp.id
+                    );
+                    const roleLabel =
+                      membership?.role === "owner"
+                        ? "Proprietário"
+                        : membership?.role === "admin"
+                        ? "Administrador"
+                        : "";
+                    return (
+                      <option key={comp.id} value={comp.id}>
+                        {comp.name} {roleLabel && `(${roleLabel})`}
+                      </option>
+                    );
+                  })}
+                </select>
+                {errors.empresa && (
+                  <p className="mt-1 text-sm text-red-600 dark:text-red-400">
+                    {errors.empresa}
+                  </p>
+                )}
+              </>
             )}
           </div>
 
@@ -255,39 +393,122 @@ export default function EditarProjetoPage() {
             )}
           </div>
 
-          {/* Valor por Hora */}
+          {/* Tipo de Cobrança */}
           <div>
-            <label
-              htmlFor="valorHora"
-              className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
-            >
-              Valor por Hora <span className="text-red-500">*</span>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+              Tipo de Cobrança <span className="text-red-500">*</span>
             </label>
-            <div className="relative">
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 dark:text-gray-400">
-                R$
-              </span>
-              <input
-                id="valorHora"
-                name="valorHora"
-                type="text"
-                required
-                value={formData.valorHora}
-                onChange={handleValorHoraChange}
-                className={`w-full pl-12 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400 ${
-                  errors.valorHora
-                    ? "border-red-500 focus:ring-red-500 focus:border-red-500"
-                    : "border-gray-300"
-                }`}
-                placeholder="0,00"
-              />
+            <div className="flex gap-6">
+              <label className="flex items-center cursor-pointer">
+                <input
+                  type="radio"
+                  name="tipoCobranca"
+                  value="horas"
+                  checked={formData.tipoCobranca === "horas"}
+                  onChange={handleChange}
+                  className="w-4 h-4 text-indigo-600 border-gray-300 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:focus:ring-indigo-600"
+                />
+                <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">
+                  Por Hora
+                </span>
+              </label>
+              <label className="flex items-center cursor-pointer">
+                <input
+                  type="radio"
+                  name="tipoCobranca"
+                  value="fixo"
+                  checked={formData.tipoCobranca === "fixo"}
+                  onChange={handleChange}
+                  className="w-4 h-4 text-indigo-600 border-gray-300 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:focus:ring-indigo-600"
+                />
+                <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">
+                  Valor Fixo
+                </span>
+              </label>
             </div>
-            {errors.valorHora && (
-              <p className="mt-1 text-sm text-red-600 dark:text-red-400">
-                {errors.valorHora}
-              </p>
-            )}
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              Escolha como o projeto será cobrado.
+            </p>
           </div>
+
+          {/* Valor por Hora (apenas se tipo for "horas") */}
+          {formData.tipoCobranca === "horas" && (
+            <div>
+              <label
+                htmlFor="valorHora"
+                className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+              >
+                Valor por Hora <span className="text-red-500">*</span>
+              </label>
+              <div className="relative">
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 dark:text-gray-400">
+                  R$
+                </span>
+                <input
+                  id="valorHora"
+                  name="valorHora"
+                  type="text"
+                  required={formData.tipoCobranca === "horas"}
+                  value={formData.valorHora}
+                  onChange={handleValorHoraChange}
+                  className={`w-full pl-12 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400 ${
+                    errors.valorHora
+                      ? "border-red-500 focus:ring-red-500 focus:border-red-500"
+                      : "border-gray-300"
+                  }`}
+                  placeholder="0,00"
+                />
+              </div>
+              {errors.valorHora && (
+                <p className="mt-1 text-sm text-red-600 dark:text-red-400">
+                  {errors.valorHora}
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Valor Fixo (apenas se tipo for "fixo") */}
+          {formData.tipoCobranca === "fixo" && (
+            <div>
+              <label
+                htmlFor="valorFixo"
+                className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+              >
+                Valor Fixo <span className="text-red-500">*</span>
+              </label>
+              <div className="relative">
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 dark:text-gray-400">
+                  R$
+                </span>
+                <input
+                  id="valorFixo"
+                  name="valorFixo"
+                  type="text"
+                  required={formData.tipoCobranca === "fixo"}
+                  value={formData.valorFixo}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    const formatted = formatCurrency(value);
+                    setFormData((prev) => ({ ...prev, valorFixo: formatted }));
+                    if (errors.valorFixo) {
+                      setErrors((prev) => ({ ...prev, valorFixo: undefined }));
+                    }
+                  }}
+                  className={`w-full pl-12 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400 ${
+                    errors.valorFixo
+                      ? "border-red-500 focus:ring-red-500 focus:border-red-500"
+                      : "border-gray-300"
+                  }`}
+                  placeholder="0,00"
+                />
+              </div>
+              {errors.valorFixo && (
+                <p className="mt-1 text-sm text-red-600 dark:text-red-400">
+                  {errors.valorFixo}
+                </p>
+              )}
+            </div>
+          )}
 
           {/* Horas úteis por dia */}
           <div>
