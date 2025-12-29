@@ -10,6 +10,7 @@ import { useAtuacoes } from "@/contexts/AtuacaoContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCompany } from "@/contexts/CompanyContext";
 import { formatRelativeTime } from "@/utils/dashboardMetrics";
+import { format, parseISO, startOfMonth, addMonths, setDate, endOfMonth } from "date-fns";
 import { memberInvoiceService } from "@/services/memberInvoiceService";
 import { companyMembershipService } from "@/services/companyMembershipService";
 import { atuacaoService } from "@/services/atuacaoService";
@@ -172,6 +173,39 @@ export default function DashboardPage() {
     ),
   };
 
+  // Calcular período de faturamento baseado na configuração da empresa
+  const billingPeriod = useMemo(() => {
+    if (!company) return null;
+    
+    const now = new Date();
+    const diaInicio = company.diaInicioFaturamento || 1;
+    const diaFim = company.diaFimFaturamento || 31;
+    
+    let inicio: Date;
+    let fim: Date;
+    
+    // Se o dia de início é maior que o dia de fim, o período vai do dia início até o dia fim do mês seguinte
+    if (diaInicio > diaFim) {
+      // Início: dia de início no mês atual
+      const inicioMonth = now;
+      inicio = setDate(inicioMonth, Math.min(diaInicio, endOfMonth(inicioMonth).getDate()));
+      
+      // Fim: dia de fim no mês seguinte
+      const fimMonth = addMonths(now, 1);
+      fim = setDate(fimMonth, Math.min(diaFim, endOfMonth(fimMonth).getDate()));
+    } else {
+      // Período dentro do mesmo mês
+      const baseMonth = now;
+      inicio = setDate(baseMonth, Math.min(diaInicio, endOfMonth(baseMonth).getDate()));
+      fim = setDate(baseMonth, Math.min(diaFim, endOfMonth(baseMonth).getDate()));
+    }
+    
+    return {
+      inicio: format(inicio, "yyyy-MM-dd"),
+      fim: format(fim, "yyyy-MM-dd"),
+    };
+  }, [company]);
+
   // Calcular métricas administrativas
   useEffect(() => {
     if (!isOwnerOrAdmin || !company) {
@@ -183,51 +217,73 @@ export default function DashboardPage() {
       try {
         setAdminMetrics((prev) => ({ ...prev, loading: true }));
 
-        // Obter primeiro e último dia do mês atual
-        const now = new Date();
-        const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
-          .toISOString()
-          .split("T")[0];
-        const lastDayOfMonth = new Date(
-          now.getFullYear(),
-          now.getMonth() + 1,
-          0
-        )
-          .toISOString()
-          .split("T")[0];
+        // Usar período de faturamento configurado ou padrão (primeiro e último dia do mês)
+        const firstDayOfPeriod = billingPeriod?.inicio || 
+          new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split("T")[0];
+        const lastDayOfPeriod = billingPeriod?.fim || 
+          new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).toISOString().split("T")[0];
 
-        // Calcular estimativa de pagamentos (faturas pendentes/atrasadas do mês)
+        // Calcular estimativa de pagamentos (períodos não pagos)
+        // Agrupar faturas por período e calcular apenas para períodos não totalmente pagos
         const memberInvoices = await memberInvoiceService.findByCompanyId(company.id);
-        const invoicesMesAtual = memberInvoices.filter((inv) => {
-          // Extrair apenas a parte da data (yyyy-MM-dd) se vier em formato ISO completo
+        
+        // Agrupar faturas por período
+        const invoicesByPeriodMap = new Map<string, typeof memberInvoices>();
+        memberInvoices.forEach((inv) => {
           const periodoInicio = inv.periodoInicio.includes("T") 
             ? inv.periodoInicio.split("T")[0] 
             : inv.periodoInicio;
           const periodoFim = inv.periodoFim.includes("T") 
             ? inv.periodoFim.split("T")[0] 
             : inv.periodoFim;
-          return (
-            periodoInicio >= firstDayOfMonth &&
-            periodoFim <= lastDayOfMonth &&
-            (inv.status === "pendente" || inv.status === "atrasado")
-          );
+          const key = `${periodoInicio}_${periodoFim}`;
+          
+          if (!invoicesByPeriodMap.has(key)) {
+            invoicesByPeriodMap.set(key, []);
+          }
+          invoicesByPeriodMap.get(key)!.push(inv);
         });
-        const estimativaPagamentos = invoicesMesAtual.reduce(
-          (sum, inv) => sum + inv.valor,
-          0
-        );
 
-        // Calcular total de registros de atuações do mês
+        // Calcular estimativa apenas para períodos não totalmente pagos
+        let estimativaPagamentos = 0;
+        invoicesByPeriodMap.forEach((invoices, key) => {
+          // Verificar se o período está totalmente pago
+          // Se todas as faturas estiverem pagas ou canceladas, o período está pago
+          const todasPagasOuCanceladas = invoices.length > 0 && 
+            invoices.every(inv => 
+              inv.status === "pago" || 
+              inv.status === "pagamentos_realizados" || 
+              inv.status === "cancelado"
+            );
+          
+          // Se o período não estiver totalmente pago, somar as faturas pendentes
+          if (!todasPagasOuCanceladas) {
+            const valorPendente = invoices
+              .filter(inv => 
+                inv.status !== "pago" && 
+                inv.status !== "pagamentos_realizados" && 
+                inv.status !== "cancelado"
+              )
+              .reduce((sum, inv) => sum + inv.valor, 0);
+            estimativaPagamentos += valorPendente;
+          }
+        });
+
+        // Calcular total de registros de atuações do período
         const allAtuacoes = await atuacaoService.findAll();
         const projetos = await projetoService.findAll(company.id);
         const projetosIds = new Set(projetos.map((p) => p.id));
-        const atuacoesMesAtual = allAtuacoes.filter(
-          (a) =>
-            a.data >= firstDayOfMonth &&
-            a.data <= lastDayOfMonth &&
+        const atuacoesPeriodo = allAtuacoes.filter((a) => {
+          const dataAtuacao = a.data.includes("T") 
+            ? a.data.split("T")[0] 
+            : a.data;
+          return (
+            dataAtuacao >= firstDayOfPeriod &&
+            dataAtuacao <= lastDayOfPeriod &&
             projetosIds.has(a.projetoId)
-        );
-        const totalAtuacoes = atuacoesMesAtual.length;
+          );
+        });
+        const totalAtuacoes = atuacoesPeriodo.length;
 
         // Calcular membros ativos
         const memberships = await companyMembershipService.findByCompanyId(company.id);
@@ -246,7 +302,7 @@ export default function DashboardPage() {
     };
 
     loadAdminMetrics();
-  }, [isOwnerOrAdmin, company]);
+  }, [isOwnerOrAdmin, company, billingPeriod]);
 
   // Calcular atividades recentes
   const recentActivities = useMemo<RecentActivity[]>(() => {
@@ -430,7 +486,7 @@ export default function DashboardPage() {
               iconBgColor="bg-green-500"
             />
             <StatCard
-              title="Estimativa de Pagamentos (Mês)"
+              title="Estimativa de Pagamentos (Períodos Não Pagos)"
               value={
                 adminMetrics.loading
                   ? "Carregando..."

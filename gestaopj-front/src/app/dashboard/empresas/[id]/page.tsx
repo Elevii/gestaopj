@@ -5,6 +5,7 @@ import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCompany } from "@/contexts/CompanyContext";
+import { useConfiguracoes } from "@/contexts/ConfiguracoesContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { companyService } from "@/services/companyService";
 import { companyMembershipService } from "@/services/companyMembershipService";
@@ -32,6 +33,7 @@ export default function EmpresaDetalhesPage() {
   const companyId = params.id as string;
   const { user: currentUser, refreshAuth, userCompanies } = useAuth();
   const { company: currentCompany, updateCompany } = useCompany();
+  const { configuracoes, updateConfiguracoes } = useConfiguracoes();
   const { canManageUsers, canChangeUserRoles, canRemoveUsers, canInviteUsers, canViewCompanyDetails } =
     usePermissions();
 
@@ -76,6 +78,7 @@ export default function EmpresaDetalhesPage() {
   const [companyForm, setCompanyForm] = useState({
     diaInicioFaturamento: "",
     diaFimFaturamento: "",
+    horasUteisPadrao: "",
   });
   const [companyFormLoading, setCompanyFormLoading] = useState(false);
 
@@ -366,15 +369,17 @@ export default function EmpresaDetalhesPage() {
       setCompanyForm({
         diaInicioFaturamento: company.diaInicioFaturamento?.toString() || "",
         diaFimFaturamento: company.diaFimFaturamento?.toString() || "",
+        horasUteisPadrao: configuracoes?.horasUteisPadrao?.toString() || "8",
       });
     }
-  }, [company]);
+  }, [company, configuracoes]);
 
   const handleOpenEditCompany = () => {
     if (company) {
       setCompanyForm({
         diaInicioFaturamento: company.diaInicioFaturamento?.toString() || "",
         diaFimFaturamento: company.diaFimFaturamento?.toString() || "",
+        horasUteisPadrao: configuracoes?.horasUteisPadrao?.toString() || "8",
       });
       setShowEditCompanyModal(true);
     }
@@ -398,11 +403,29 @@ export default function EmpresaDetalhesPage() {
       return;
     }
 
+    // Validação horas úteis
+    const parseHorasUteis = (value: string): number => {
+      const normalized = value.replace(",", ".").trim();
+      return parseFloat(normalized);
+    };
+
+    const horasUteis = parseHorasUteis(companyForm.horasUteisPadrao);
+    if (isNaN(horasUteis) || horasUteis < 1 || horasUteis > 24) {
+      alert("Horas úteis padrão deve ser entre 1 e 24");
+      return;
+    }
+
     setCompanyFormLoading(true);
     try {
+      // Atualizar período de faturamento na empresa
       await updateCompany(company.id, {
         diaInicioFaturamento: diaInicio,
         diaFimFaturamento: diaFim,
+      });
+      
+      // Atualizar horas úteis padrão nas configurações
+      await updateConfiguracoes({
+        horasUteisPadrao: horasUteis,
       });
       
       // Recarregar dados da empresa
@@ -412,9 +435,9 @@ export default function EmpresaDetalhesPage() {
       }
       
       setShowEditCompanyModal(false);
-      alert("Período de faturamento atualizado com sucesso!");
+      alert("Configurações atualizadas com sucesso!");
     } catch (error: any) {
-      alert(error.message || "Erro ao salvar período de faturamento");
+      alert(error.message || "Erro ao salvar configurações");
     } finally {
       setCompanyFormLoading(false);
     }
@@ -472,50 +495,63 @@ export default function EmpresaDetalhesPage() {
             Voltar para empresas
           </Link>
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-            {canViewCompanyDetails ? "Gestão de Membros" : "Detalhes da Empresa"}
+            Detalhes da Empresa
           </h1>
           <p className="mt-2 text-gray-600 dark:text-gray-400">
             {company.name}
           </p>
         </div>
-        {canInviteUsers && canViewCompanyDetails && (
-          <button
-            onClick={() => setShowInviteModal(true)}
-            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors flex items-center gap-2"
-          >
-            <svg
-              className="w-5 h-5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
+        <div className="flex gap-3">
+          {isOwnerOrAdmin && (
+            <button
+              onClick={handleOpenEditCompany}
+              className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors flex items-center gap-2"
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M12 4v16m8-8H4"
-              />
-            </svg>
-            Convidar Membro
-          </button>
-        )}
+              <svg
+                className="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                />
+              </svg>
+              Editar Configurações
+            </button>
+          )}
+          {canInviteUsers && canViewCompanyDetails && (
+            <button
+              onClick={() => setShowInviteModal(true)}
+              className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors flex items-center gap-2"
+            >
+              <svg
+                className="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 4v16m8-8H4"
+                />
+              </svg>
+              Convidar Membro
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Informações básicas da empresa */}
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-            Informações da Empresa
-          </h2>
-          {isOwnerOrAdmin && (
-            <button
-              onClick={handleOpenEditCompany}
-              className="px-3 py-1.5 text-sm font-medium text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300"
-            >
-              Editar Período de Faturamento
-            </button>
-          )}
-        </div>
+        <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
+          Informações da Empresa
+        </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -555,16 +591,39 @@ export default function EmpresaDetalhesPage() {
               <p className="text-gray-900 dark:text-white">{company.address}</p>
             </div>
           )}
-          {(company.diaInicioFaturamento || company.diaFimFaturamento) && (
-            <div className="md:col-span-2 pt-4 border-t border-gray-200 dark:border-gray-700">
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Período de Faturamento
-              </label>
-              <p className="text-gray-900 dark:text-white">
-                Do dia {company.diaInicioFaturamento || "-"} ao dia {company.diaFimFaturamento || "-"} de cada mês
-              </p>
-            </div>
-          )}
+        </div>
+      </div>
+
+      {/* Configurações da Empresa */}
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+        <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
+          Configurações
+        </h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Período de Faturamento
+            </label>
+            <p className="text-gray-900 dark:text-white">
+              {company.diaInicioFaturamento && company.diaFimFaturamento
+                ? `Do dia ${company.diaInicioFaturamento} ao dia ${company.diaFimFaturamento} de cada mês`
+                : "Não configurado"}
+            </p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              Exemplo: do dia 26 até o dia 25 do mês seguinte
+            </p>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Horas Úteis Padrão
+            </label>
+            <p className="text-gray-900 dark:text-white">
+              {configuracoes?.horasUteisPadrao || 8} horas por dia
+            </p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              Valor padrão usado ao criar novos projetos
+            </p>
+          </div>
         </div>
       </div>
 
@@ -1033,18 +1092,18 @@ export default function EmpresaDetalhesPage() {
         </div>
       )}
 
-      {/* Modal de Edição de Período de Faturamento */}
+      {/* Modal de Edição de Configurações */}
       {showEditCompanyModal && isOwnerOrAdmin && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl p-6 max-w-md w-full mx-4">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl p-6 max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto">
             <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
-              Editar Período de Faturamento
+              Editar Configurações da Empresa
             </h2>
             <form onSubmit={handleSaveCompany}>
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Dia de Início do Período (1-31)
+                    Dia de Início do Período de Faturamento (1-31)
                   </label>
                   <input
                     type="number"
@@ -1066,7 +1125,7 @@ export default function EmpresaDetalhesPage() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Dia de Fim do Período (1-31)
+                    Dia de Fim do Período de Faturamento (1-31)
                   </label>
                   <input
                     type="number"
@@ -1084,6 +1143,26 @@ export default function EmpresaDetalhesPage() {
                   />
                   <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                     Dia do mês em que o período de faturamento termina
+                  </p>
+                </div>
+                <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Horas Úteis Padrão
+                  </label>
+                  <input
+                    type="text"
+                    value={companyForm.horasUteisPadrao}
+                    onChange={(e) =>
+                      setCompanyForm({
+                        ...companyForm,
+                        horasUteisPadrao: e.target.value,
+                      })
+                    }
+                    className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors dark:bg-gray-700 dark:text-white"
+                    placeholder="Ex: 8 ou 8,5"
+                  />
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    Valor padrão usado ao criar novos projetos (1-24 horas, decimal permitido)
                   </p>
                 </div>
               </div>

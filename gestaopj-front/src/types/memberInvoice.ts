@@ -15,6 +15,7 @@ export interface MemberInvoice {
   tipoCalculo: "horas" | "fixo"; // Baseado em UserCompanySettings
   valorPorHora?: number; // Para cálculo quando horista
   valorFixo?: number; // Para cálculo quando não horista
+  valorManual?: boolean; // Indica se o valor foi editado manualmente
   lembretes: Lembrete[];
   observacoes?: string;
   createdAt: string;
@@ -40,6 +41,7 @@ export interface CreateMemberInvoiceDTO {
 export interface UpdateMemberInvoiceDTO {
   titulo?: string;
   valor?: number;
+  valorManual?: boolean; // Indica se o valor foi editado manualmente
   dataVencimento?: string;
   dataPagamento?: string;
   status?: StatusFatura;

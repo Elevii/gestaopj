@@ -7,6 +7,7 @@ import { memberInvoiceService } from "@/services/memberInvoiceService";
 import { userService } from "@/services/userService";
 import { MemberInvoice } from "@/types/memberInvoice";
 import { User } from "@/types/user";
+import { StatusFatura } from "@/types";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useFormatDate } from "@/hooks/useFormatDate";
@@ -23,6 +24,10 @@ export default function MemberInvoicesDetailPage() {
   const { formatDate } = useFormatDate();
   const [invoices, setInvoices] = useState<InvoiceWithUser[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // Filtros
+  const [searchName, setSearchName] = useState("");
+  const [filterStatus, setFilterStatus] = useState<StatusFatura | "all">("all");
 
   const periodoKey = params.periodo as string;
   const [periodoInicio, periodoFim] = periodoKey
@@ -78,6 +83,42 @@ export default function MemberInvoicesDetailPage() {
       currency: "BRL",
     }).format(value);
   };
+
+  // Filtrar faturas
+  const filteredInvoices = useMemo(() => {
+    return invoices.filter((invoice) => {
+      // Filtro por nome
+      if (searchName) {
+        const searchLower = searchName.toLowerCase();
+        const userName = invoice.user?.name?.toLowerCase() || "";
+        const userEmail = invoice.user?.email?.toLowerCase() || "";
+        if (!userName.includes(searchLower) && !userEmail.includes(searchLower)) {
+          return false;
+        }
+      }
+
+      // Filtro por status
+      if (filterStatus !== "all") {
+        if (filterStatus === "pago") {
+          // Incluir tanto "pago" quanto "pagamentos_realizados"
+          if (invoice.status !== "pago" && invoice.status !== "pagamentos_realizados") {
+            return false;
+          }
+        } else if (filterStatus === "pagamentos_realizados") {
+          // Incluir apenas "pagamentos_realizados"
+          if (invoice.status !== "pagamentos_realizados") {
+            return false;
+          }
+        } else {
+          if (invoice.status !== filterStatus) {
+            return false;
+          }
+        }
+      }
+
+      return true;
+    });
+  }, [invoices, searchName, filterStatus]);
 
   const totalizadores = useMemo(() => {
     return invoices.reduce(
@@ -318,9 +359,59 @@ export default function MemberInvoicesDetailPage() {
       {/* Listagem de Faturas */}
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-          <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-            Faturas ({invoices.length} {invoices.length === 1 ? "membro" : "membros"})
-          </h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+              Faturas ({filteredInvoices.length} {filteredInvoices.length === 1 ? "membro" : "membros"})
+            </h2>
+          </div>
+          
+          {/* Filtros */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wider">
+                Pesquisar por Nome
+              </label>
+              <input
+                type="text"
+                value={searchName}
+                onChange={(e) => setSearchName(e.target.value)}
+                placeholder="Digite o nome ou email..."
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wider">
+                Filtrar por Status
+              </label>
+              <select
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value as StatusFatura | "all")}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm"
+              >
+                <option value="all">Todos</option>
+                <option value="fatura_gerada">Fatura Gerada</option>
+                <option value="pagamentos_realizados">Pagamentos Realizados</option>
+                <option value="pago">Pago</option>
+                <option value="pendente">Pendente</option>
+                <option value="atrasado">Atrasado</option>
+                <option value="cancelado">Cancelado</option>
+              </select>
+            </div>
+            <div className="flex items-end">
+              <button
+                onClick={() => {
+                  setSearchName("");
+                  setFilterStatus("all");
+                }}
+                className="w-full px-3 py-2 text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors flex items-center justify-center gap-1 border border-gray-200 dark:border-gray-700 rounded-lg"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+                Limpar Filtros
+              </button>
+            </div>
+          </div>
         </div>
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
@@ -331,12 +422,6 @@ export default function MemberInvoicesDetailPage() {
                   className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
                 >
                   Usuário
-                </th>
-                <th
-                  scope="col"
-                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
-                >
-                  Título
                 </th>
                 <th
                   scope="col"
@@ -360,7 +445,19 @@ export default function MemberInvoicesDetailPage() {
                   scope="col"
                   className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
                 >
+                  Valor Manual
+                </th>
+                <th
+                  scope="col"
+                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
+                >
                   Vencimento
+                </th>
+                <th
+                  scope="col"
+                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
+                >
+                  Pago
                 </th>
                 <th
                   scope="col"
@@ -377,7 +474,7 @@ export default function MemberInvoicesDetailPage() {
               </tr>
             </thead>
             <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-              {invoices.map((invoice) => {
+              {filteredInvoices.map((invoice) => {
                 const isLate =
                   invoice.status !== "pago" && invoice.status !== "pagamentos_realizados" &&
                   parseISO(invoice.dataVencimento) < new Date();
@@ -393,11 +490,6 @@ export default function MemberInvoicesDetailPage() {
                       </div>
                       <div className="text-xs text-gray-500 dark:text-gray-400">
                         {invoice.user?.email || "-"}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="text-sm text-gray-900 dark:text-white">
-                        {invoice.titulo}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -427,11 +519,40 @@ export default function MemberInvoicesDetailPage() {
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
                       {formatCurrency(invoice.valor)}
                     </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span
+                        className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                          invoice.valorManual
+                            ? "bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300"
+                            : "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300"
+                        }`}
+                      >
+                        {invoice.valorManual ? "Sim" : "Não"}
+                      </span>
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                       {formatDate(invoice.dataVencimento)}
                       {isLate && (
                         <div className="text-xs text-red-600 dark:text-red-400 mt-1">
                           Vencido
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span
+                        className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                          invoice.status === "pago" || invoice.status === "pagamentos_realizados"
+                            ? "bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300"
+                            : "bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300"
+                        }`}
+                      >
+                        {invoice.status === "pago" || invoice.status === "pagamentos_realizados"
+                          ? "Sim"
+                          : "Não"}
+                      </span>
+                      {invoice.dataPagamento && (
+                        <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                          {formatDate(invoice.dataPagamento)}
                         </div>
                       )}
                     </td>
@@ -460,11 +581,6 @@ export default function MemberInvoicesDetailPage() {
                             ? "Fatura Gerada"
                             : "Pendente"}
                         </span>
-                        {invoice.dataPagamento && (
-                          <span className="text-xs text-gray-500 dark:text-gray-400">
-                            {formatDate(invoice.dataPagamento)}
-                          </span>
-                        )}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
