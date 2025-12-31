@@ -1,4 +1,6 @@
 import { User, LoginDTO } from "@/types/user";
+import { AuthResponse, RegisterDTO } from "@/types/auth";
+import { api } from "@/lib/api";
 import { userService } from "./userService";
 import { companyService } from "./companyService";
 import { subscriptionService } from "./subscriptionService";
@@ -10,6 +12,7 @@ import { CompanyMembership } from "@/types/companyMembership";
 const SESSION_KEY = "gestaopj_session";
 const CURRENT_USER_KEY = "gestaopj_current_user";
 const CURRENT_COMPANY_KEY = "gestaopj_current_company";
+const ACCESS_TOKEN_KEY = "gestaopj_access_token";
 
 interface Session {
   userId: string;
@@ -56,6 +59,88 @@ class AuthService {
     localStorage.removeItem(SESSION_KEY);
     localStorage.removeItem(CURRENT_USER_KEY);
     localStorage.removeItem(CURRENT_COMPANY_KEY);
+    localStorage.removeItem(ACCESS_TOKEN_KEY);
+    api.clearAuthToken();
+  }
+
+  // Converter UserResponse para User (compatibilidade)
+  private mapUserResponseToUser(userResponse: any): User {
+    return {
+      id: userResponse.id,
+      email: userResponse.email,
+      name: userResponse.name,
+      active: userResponse.active,
+      lastLoginAt: userResponse.lastLoginAt,
+      createdAt: userResponse.createdAt,
+      updatedAt: userResponse.updatedAt,
+    };
+  }
+
+  async register(registerDto: RegisterDTO): Promise<{
+    user: User;
+    companies: CompanyMembership[];
+    company: Company | null;
+    subscription: Subscription | null;
+    limits: PlanLimits | null;
+  }> {
+    // Chamar API de registro
+    const authResponse: AuthResponse = await api.post('/auth/register', registerDto);
+
+    // Salvar token
+    api.setAuthToken(authResponse.accessToken);
+    localStorage.setItem(ACCESS_TOKEN_KEY, authResponse.accessToken);
+
+    // Converter resposta para User
+    const user = this.mapUserResponseToUser(authResponse.user);
+
+    // Buscar empresas do usuário (ainda usando localStorage por enquanto)
+    const memberships = await companyMembershipService.findByUserId(user.id);
+    
+    // Buscar dados completos das empresas
+    const companiesData: CompanyMembership[] = [];
+    let defaultCompany: Company | null = null;
+    let subscription: Subscription | null = null;
+    let limits: PlanLimits | null = null;
+
+    if (memberships.length > 0) {
+      const defaultMembership = memberships[0];
+      defaultCompany = await companyService.findById(defaultMembership.companyId);
+      
+      if (defaultCompany && defaultCompany.active) {
+        subscription = await subscriptionService.findByCompanyId(defaultCompany.id);
+        limits = subscription
+          ? await subscriptionService.getCompanyLimits(defaultCompany.id)
+          : null;
+      }
+
+      companiesData.push(...memberships);
+    }
+
+    // Criar sessão (expira em 7 dias)
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 7);
+
+    const session: Session = {
+      userId: user.id,
+      companyId: defaultCompany?.id,
+      expiresAt: expiresAt.toISOString(),
+    };
+
+    this.saveSession(session);
+
+    // Salvar dados atuais no localStorage para acesso rápido
+    localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(user));
+    if (defaultCompany) {
+      localStorage.setItem(CURRENT_COMPANY_KEY, JSON.stringify(defaultCompany));
+    }
+
+    return {
+      user,
+      companies: companiesData,
+      company: defaultCompany,
+      subscription,
+      limits,
+    };
   }
 
   async login(credentials: LoginDTO): Promise<{
@@ -65,37 +150,17 @@ class AuthService {
     subscription: Subscription | null;
     limits: PlanLimits | null;
   }> {
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    // Chamar API de login
+    const authResponse: AuthResponse = await api.post('/auth/login', credentials);
 
-    const user = await userService.findByEmail(credentials.email);
+    // Salvar token
+    api.setAuthToken(authResponse.accessToken);
+    localStorage.setItem(ACCESS_TOKEN_KEY, authResponse.accessToken);
 
-    if (!user) {
-      throw new Error("Email ou senha inválidos");
-    }
+    // Converter resposta para User
+    const user = this.mapUserResponseToUser(authResponse.user);
 
-    if (!user.active) {
-      throw new Error("Usuário inativo");
-    }
-
-    // Verificar senha (simulação - em produção isso deve ser feito no backend)
-    // Tentar verificar com hash atual primeiro
-    let passwordMatch = btoa(credentials.password) === user.passwordHash;
-    
-    // Se não funcionar, pode ser hash antigo (compatibilidade)
-    if (!passwordMatch) {
-      // Tentar verificação alternativa para dados antigos
-      passwordMatch = credentials.password === user.passwordHash || 
-                     btoa(credentials.password) === user.passwordHash;
-    }
-    
-    if (!passwordMatch) {
-      throw new Error("Email ou senha inválidos");
-    }
-
-    // Atualizar último login
-    await userService.update(user.id, {});
-
-    // Buscar empresas do usuário
+    // Buscar empresas do usuário (ainda usando localStorage por enquanto)
     const memberships = await companyMembershipService.findByUserId(user.id);
     
     // Buscar dados completos das empresas
@@ -147,7 +212,6 @@ class AuthService {
   }
 
   async logout(): Promise<void> {
-    await new Promise((resolve) => setTimeout(resolve, 200));
     this.clearSession();
   }
 
@@ -274,7 +338,8 @@ class AuthService {
 
   isAuthenticated(): boolean {
     const session = this.getSession();
-    return session !== null;
+    const token = typeof window !== "undefined" ? localStorage.getItem(ACCESS_TOKEN_KEY) : null;
+    return session !== null && token !== null;
   }
 
   async needsOnboarding(): Promise<boolean> {
@@ -302,4 +367,3 @@ class AuthService {
 }
 
 export const authService = new AuthService();
-

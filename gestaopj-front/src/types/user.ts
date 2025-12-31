@@ -4,7 +4,7 @@ export interface User {
   id: string;
   email: string;
   name: string;
-  passwordHash: string; // Em produção, nunca deve ser exposto ao frontend
+  // passwordHash removido - não vem mais do backend
   active: boolean;
   lastLoginAt?: string;
   createdAt: string;

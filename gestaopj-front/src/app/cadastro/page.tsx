@@ -3,7 +3,6 @@
 import { useState, FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { userService } from "@/services/userService";
 import { authService } from "@/services/authService";
 
 export default function CadastroPage() {
@@ -31,9 +30,8 @@ export default function CadastroPage() {
   };
 
   const validatePassword = (password: string) => {
-    // Mínimo 8 caracteres, pelo menos uma letra maiúscula, uma minúscula e um número
-    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
-    return passwordRegex.test(password);
+    // Mínimo 6 caracteres (compatível com backend)
+    return password.length >= 6;
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -92,11 +90,11 @@ export default function CadastroPage() {
       return;
     }
 
-    // Criar apenas o usuário
+    // Registrar usuário (já faz login automaticamente)
     setIsLoading(true);
     try {
-      // Criar usuário
-      await userService.create({
+      // Registrar e fazer login automático
+      await authService.register({
         email: formData.email,
         name: formData.nome,
         password: formData.password,
@@ -104,20 +102,10 @@ export default function CadastroPage() {
 
       setSuccess(true);
 
-      // Fazer login automático e redirecionar para onboarding
-      setTimeout(async () => {
-        try {
-          await authService.login({
-            email: formData.email,
-            password: formData.password,
-          });
-
-          // Sempre redirecionar para onboarding, pois não tem empresa ainda
-          router.push("/onboarding");
-        } catch (loginError) {
-          // Se login falhar, redirecionar para página de login
-          router.push("/login?cadastro=sucesso");
-        }
+      // Redirecionar para onboarding após registro bem-sucedido
+      setTimeout(() => {
+        // Sempre redirecionar para onboarding, pois não tem empresa ainda
+        router.push("/onboarding");
       }, 1500);
     } catch (error: any) {
       console.error("Erro no cadastro:", error);

@@ -374,6 +374,7 @@ export interface UpdateConfiguracoesDTO {
 
 // Exportar novos tipos
 export * from "./user";
+export * from "./auth";
 export * from "./company";
 export * from "./subscription";
 export * from "./permissions";

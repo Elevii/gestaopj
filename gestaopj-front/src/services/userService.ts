@@ -85,7 +85,9 @@ class UserService {
     const users = this.getUsersFromStorage();
     const now = new Date().toISOString();
 
-    const novoUser: User = {
+    // Nota: Este método não é mais usado - cadastro agora é feito via authService.register
+    // Mantido apenas para compatibilidade com código antigo
+    const novoUser = {
       id: `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       email: data.email,
       name: data.name,
@@ -93,7 +95,7 @@ class UserService {
       active: data.active !== undefined ? data.active : true,
       createdAt: now,
       updatedAt: now,
-    };
+    } as User & { passwordHash: string };
 
     users.push(novoUser);
     this.saveUsersToStorage(users);
