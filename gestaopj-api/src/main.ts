@@ -6,8 +6,11 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   
   // Habilitar CORS
+  const frontendUrl = process.env.FRONTEND_URL;
   app.enableCors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    origin: frontendUrl 
+      ? [frontendUrl, 'http://localhost:3000'] 
+      : true, // Em desenvolvimento, aceitar qualquer origem
     credentials: true,
   });
   
