@@ -11,7 +11,15 @@ import { authService } from "@/services/authService";
 
 export default function CriarEmpresaPage() {
   const router = useRouter();
-  const { user, refreshAuth, switchCompany, userCompanies, company, loading, isAuthenticated } = useAuth();
+  const {
+    user,
+    refreshAuth,
+    switchCompany,
+    userCompanies,
+    company,
+    loading,
+    isAuthenticated,
+  } = useAuth();
   const [formData, setFormData] = useState({
     nomeEmpresa: "",
     cnpj: "",
@@ -29,7 +37,7 @@ export default function CriarEmpresaPage() {
   useEffect(() => {
     const checkAndRedirect = async () => {
       if (loading || !isAuthenticated || !user) return;
-      
+
       // Se já tem empresas, redirecionar para dashboard
       if (userCompanies.length > 0) {
         // Se não tem empresa selecionada, selecionar a primeira
@@ -37,7 +45,7 @@ export default function CriarEmpresaPage() {
           try {
             await authService.switchCompany(userCompanies[0].companyId);
             await refreshAuth();
-            await new Promise(resolve => setTimeout(resolve, 100));
+            await new Promise((resolve) => setTimeout(resolve, 100));
           } catch (error) {
             console.error("Erro ao selecionar empresa:", error);
           }
@@ -48,9 +56,18 @@ export default function CriarEmpresaPage() {
     };
 
     checkAndRedirect();
-  }, [loading, isAuthenticated, user, userCompanies.length, company, refreshAuth]);
+  }, [
+    loading,
+    isAuthenticated,
+    user,
+    userCompanies.length,
+    company,
+    refreshAuth,
+  ]);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+  ) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
     if (errors[name]) {
@@ -111,10 +128,10 @@ export default function CriarEmpresaPage() {
       // Usar authService diretamente para garantir que a sessão está disponível
       await authService.switchCompany(empresa.id);
       await refreshAuth();
-      
+
       // Aguardar um pouco para garantir que o estado seja atualizado
-      await new Promise(resolve => setTimeout(resolve, 100));
-      
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
       // Redirecionar para dashboard
       router.push("/dashboard");
     } catch (error: any) {
@@ -291,5 +308,3 @@ export default function CriarEmpresaPage() {
     </div>
   );
 }
-
-

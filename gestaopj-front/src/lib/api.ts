@@ -45,6 +45,23 @@ class ApiClient {
     });
 
     if (!response.ok) {
+      // Se receber 401 Unauthorized, limpar tokens e redirecionar para login
+      if (response.status === 401) {
+        if (typeof window !== 'undefined') {
+          console.log('❌ Token inválido ou expirado - fazendo logout');
+          localStorage.removeItem('gestaopj_access_token');
+          localStorage.removeItem('gestaopj_session');
+          localStorage.removeItem('gestaopj_current_user');
+          localStorage.removeItem('gestaopj_current_company');
+          
+          // Redirecionar para login apenas se não estiver já na página de login
+          if (!window.location.pathname.includes('/login') && 
+              !window.location.pathname.includes('/cadastro')) {
+            window.location.href = '/login';
+          }
+        }
+      }
+      
       const errorData = await response.json().catch(() => ({
         message: response.statusText || 'Erro na requisição',
       }));

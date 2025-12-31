@@ -28,7 +28,9 @@ export default function EmpresasPage() {
   const [companies, setCompanies] = useState<CompanyWithMembership[]>([]);
   const [invites, setInvites] = useState<InviteWithCompany[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<"empresas" | "convites">("empresas");
+  const [activeTab, setActiveTab] = useState<"empresas" | "convites">(
+    "empresas"
+  );
 
   // Membros podem acessar, mas apenas visualizar (sem opções de edição)
 
@@ -58,8 +60,10 @@ export default function EmpresasPage() {
 
         // Carregar convites pendentes
         await inviteService.expireOldInvites();
-        const pendingInvites = await inviteService.findPendingByEmail(user.email);
-        
+        const pendingInvites = await inviteService.findPendingByEmail(
+          user.email
+        );
+
         // Buscar dados das empresas dos convites
         const invitesWithCompanies = await Promise.all(
           pendingInvites.map(async (invite) => {
@@ -110,10 +114,10 @@ export default function EmpresasPage() {
       // Selecionar empresa aceita e atualizar autenticação
       await authService.switchCompany(invite.companyId);
       await refreshAuth();
-      
+
       // Aguardar um pouco para garantir que o estado seja atualizado
-      await new Promise(resolve => setTimeout(resolve, 100));
-      
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
       // Recarregar página para atualizar estado
       window.location.reload();
     } catch (error: any) {
@@ -142,9 +146,11 @@ export default function EmpresasPage() {
 
   const getRoleBadgeColor = (role: string) => {
     const colors: Record<string, string> = {
-      owner: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200",
+      owner:
+        "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200",
       admin: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
-      member: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
+      member:
+        "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
       viewer: "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200",
     };
     return colors[role] || colors.viewer;
@@ -260,8 +266,9 @@ export default function EmpresasPage() {
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {companies.map((comp) => {
                 const isCurrent = comp.id === currentCompany?.id;
-                const companyName = comp.name || comp.membership?.companyId || "Empresa sem nome";
-                
+                const companyName =
+                  comp.name || comp.membership?.companyId || "Empresa sem nome";
+
                 const handleCardClick = async () => {
                   // Se não for a empresa atual, trocar primeiro
                   if (!isCurrent) {
@@ -339,7 +346,8 @@ export default function EmpresasPage() {
           ) : (
             <div className="space-y-4">
               {invites.map((invite) => {
-                const companyName = invite.company?.name || invite.companyId || "Empresa";
+                const companyName =
+                  invite.company?.name || invite.companyId || "Empresa";
                 return (
                   <div
                     key={invite.id}
@@ -363,15 +371,19 @@ export default function EmpresasPage() {
                           </p>
                           <p>
                             <span className="font-medium">Expira em:</span>{" "}
-                            {new Date(invite.expiresAt).toLocaleDateString("pt-BR", {
-                              day: "2-digit",
-                              month: "long",
-                              year: "numeric",
-                            })}
+                            {new Date(invite.expiresAt).toLocaleDateString(
+                              "pt-BR",
+                              {
+                                day: "2-digit",
+                                month: "long",
+                                year: "numeric",
+                              }
+                            )}
                           </p>
                           {invite.company?.email && (
                             <p>
-                              <span className="font-medium">Email:</span> {invite.company.email}
+                              <span className="font-medium">Email:</span>{" "}
+                              {invite.company.email}
                             </p>
                           )}
                         </div>
@@ -401,4 +413,3 @@ export default function EmpresasPage() {
     </div>
   );
 }
-

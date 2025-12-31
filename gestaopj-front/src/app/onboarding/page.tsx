@@ -17,7 +17,14 @@ interface InviteWithCompany extends Invite {
 
 export default function OnboardingPage() {
   const router = useRouter();
-  const { user, isAuthenticated, loading, refreshAuth, userCompanies, company } = useAuth();
+  const {
+    user,
+    isAuthenticated,
+    loading,
+    refreshAuth,
+    userCompanies,
+    company,
+  } = useAuth();
   const [invites, setInvites] = useState<InviteWithCompany[]>([]);
   const [loadingInvites, setLoadingInvites] = useState(true);
 
@@ -33,7 +40,7 @@ export default function OnboardingPage() {
   useEffect(() => {
     const checkAndRedirect = async () => {
       if (loading || !isAuthenticated || !user) return;
-      
+
       // Se já tem empresas, redirecionar para dashboard
       if (userCompanies.length > 0) {
         // Se não tem empresa selecionada, selecionar a primeira
@@ -42,7 +49,7 @@ export default function OnboardingPage() {
             await authService.switchCompany(userCompanies[0].companyId);
             await refreshAuth();
             // Aguardar um pouco para garantir que o estado seja atualizado
-            await new Promise(resolve => setTimeout(resolve, 100));
+            await new Promise((resolve) => setTimeout(resolve, 100));
           } catch (error) {
             console.error("Erro ao selecionar empresa:", error);
           }
@@ -53,7 +60,14 @@ export default function OnboardingPage() {
     };
 
     checkAndRedirect();
-  }, [loading, isAuthenticated, user, userCompanies.length, company, refreshAuth]);
+  }, [
+    loading,
+    isAuthenticated,
+    user,
+    userCompanies.length,
+    company,
+    refreshAuth,
+  ]);
 
   useEffect(() => {
     const loadInvites = async () => {
@@ -63,8 +77,10 @@ export default function OnboardingPage() {
         setLoadingInvites(true);
         // Expirar convites antigos primeiro
         await inviteService.expireOldInvites();
-        const pendingInvites = await inviteService.findPendingByEmail(user.email);
-        
+        const pendingInvites = await inviteService.findPendingByEmail(
+          user.email
+        );
+
         // Buscar dados das empresas dos convites
         const invitesWithCompanies = await Promise.all(
           pendingInvites.map(async (invite) => {
@@ -72,7 +88,7 @@ export default function OnboardingPage() {
             return { ...invite, company: company ?? undefined };
           })
         );
-        
+
         setInvites(invitesWithCompanies);
       } catch (error) {
         console.error("Erro ao carregar convites:", error);
@@ -103,10 +119,10 @@ export default function OnboardingPage() {
       // Selecionar empresa aceita e atualizar autenticação
       await authService.switchCompany(invite.companyId);
       await refreshAuth();
-      
+
       // Aguardar um pouco para garantir que o estado seja atualizado
-      await new Promise(resolve => setTimeout(resolve, 100));
-      
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
       // Redirecionar para dashboard
       router.push("/dashboard");
     } catch (error: any) {
@@ -260,5 +276,3 @@ export default function OnboardingPage() {
     </div>
   );
 }
-
-

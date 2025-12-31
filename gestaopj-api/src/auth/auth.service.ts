@@ -93,5 +93,16 @@ export class AuthService {
       updatedAt: user.updatedAt.toISOString(),
     };
   }
+
+  async getProfile(userId: string): Promise<UserResponseDto> {
+    const user = await this.usersService.findById(userId);
+    if (!user) {
+      throw new UnauthorizedException('Usuário não encontrado');
+    }
+    if (!user.active) {
+      throw new UnauthorizedException('Usuário inativo');
+    }
+    return this.mapToUserResponse(user);
+  }
 }
 

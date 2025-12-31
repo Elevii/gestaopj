@@ -220,19 +220,19 @@ class AuthService {
     if (!session) return null;
 
     try {
-      const stored = localStorage.getItem(CURRENT_USER_KEY);
-      if (stored) {
-        const user = JSON.parse(stored) as User;
-        // Verificar se usuário ainda existe e está ativo
-        const freshUser = await userService.findById(user.id);
-        if (freshUser && freshUser.active) {
-          return freshUser;
-        }
+      // Usar o endpoint /auth/me do backend para validar token e obter usuário
+      const user = await api.get<User>('/auth/me');
+      
+      // Cachear o usuário
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(user));
       }
-
-      // Buscar do serviço se não estiver em cache
-      return await userService.findById(session.userId);
-    } catch {
+      
+      return user;
+    } catch (error) {
+      console.error('Erro ao obter usuário atual:', error);
+      // Se falhar (token inválido, expirado, etc), fazer logout
+      this.clearSession();
       return null;
     }
   }

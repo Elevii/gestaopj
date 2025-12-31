@@ -12,7 +12,12 @@ import { Company } from "@/types/company";
 export default function LoginForm() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const { login: loginContext, userCompanies, company: currentCompany, refreshAuth } = useAuth();
+  const {
+    login: loginContext,
+    userCompanies,
+    company: currentCompany,
+    refreshAuth,
+  } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -73,46 +78,52 @@ export default function LoginForm() {
     try {
       // Primeiro faz login direto para obter os dados
       const loginResult = await authService.login({ email, password });
-      
+
       // Depois atualiza o contexto com os dados
       await loginContext(email, password);
-      
+
       // Aguardar para garantir que o contexto seja atualizado antes de redirecionar
-      await new Promise(resolve => setTimeout(resolve, 300));
-      
-      console.log('✅ Login bem-sucedido:', {
+      await new Promise((resolve) => setTimeout(resolve, 300));
+
+      console.log("✅ Login bem-sucedido:", {
         hasUser: !!loginResult.user,
         companiesCount: loginResult.companies.length,
         hasCompany: !!loginResult.company,
       });
-      
+
       // Se não tem empresas, redirecionar para onboarding
       if (loginResult.companies.length === 0) {
-        console.log('🔄 Redirecionando para onboarding (sem empresas)');
+        console.log("🔄 Redirecionando para onboarding (sem empresas)");
         // Aguardar para garantir que o contexto seja atualizado
-        await new Promise(resolve => setTimeout(resolve, 200));
+        await new Promise((resolve) => setTimeout(resolve, 200));
         router.push("/onboarding");
         return;
       }
 
       // Se já tem empresa selecionada, redirecionar para dashboard
       if (loginResult.company) {
-        console.log('🔄 Redirecionando para dashboard (empresa selecionada:', loginResult.company.id, ')');
-        await new Promise(resolve => setTimeout(resolve, 200));
+        console.log(
+          "🔄 Redirecionando para dashboard (empresa selecionada:",
+          loginResult.company.id,
+          ")"
+        );
+        await new Promise((resolve) => setTimeout(resolve, 200));
         router.push("/dashboard");
         return;
       }
 
       // Se não tem empresa selecionada mas tem empresas disponíveis, mostrar seletor
       if (loginResult.companies.length > 0) {
-        console.log('🔄 Mostrando seletor de empresas');
+        console.log("🔄 Mostrando seletor de empresas");
         // Buscar dados completos das empresas
         const companiesData = await Promise.all(
           loginResult.companies.map((membership) =>
             companyService.findById(membership.companyId)
           )
         );
-        const validCompanies = companiesData.filter((c): c is Company => c !== null);
+        const validCompanies = companiesData.filter(
+          (c): c is Company => c !== null
+        );
 
         setLoginResult({
           companies: loginResult.companies,
@@ -122,16 +133,13 @@ export default function LoginForm() {
       }
     } catch (error: any) {
       // Erros esperados (credenciais inválidas, usuário inativo) não precisam ser logados
-      const expectedErrors = [
-        "Email ou senha inválidos",
-        "Usuário inativo"
-      ];
-      
+      const expectedErrors = ["Email ou senha inválidos", "Usuário inativo"];
+
       if (!expectedErrors.includes(error?.message)) {
         // Apenas logar erros inesperados
         console.error("Erro inesperado no login:", error);
       }
-      
+
       setErrors({
         email: error?.message || "Credenciais inválidas. Tente novamente.",
       });
@@ -144,8 +152,8 @@ export default function LoginForm() {
     setSelectingCompany(true);
     try {
       await authService.switchCompany(companyId);
-      console.log('🔄 Redirecionando para dashboard após selecionar empresa');
-      await new Promise(resolve => setTimeout(resolve, 200));
+      console.log("🔄 Redirecionando para dashboard após selecionar empresa");
+      await new Promise((resolve) => setTimeout(resolve, 200));
       router.push("/dashboard");
     } catch (error) {
       console.error("Erro ao selecionar empresa:", error);
@@ -279,9 +287,7 @@ export default function LoginForm() {
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 focus:outline-none"
-                  aria-label={
-                    showPassword ? "Ocultar senha" : "Mostrar senha"
-                  }
+                  aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
                 >
                   {showPassword ? (
                     <svg
@@ -461,4 +467,3 @@ export default function LoginForm() {
     </div>
   );
 }
-

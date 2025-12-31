@@ -17,7 +17,14 @@ interface InviteWithCompany extends Invite {
 
 export default function ConvitesPage() {
   const router = useRouter();
-  const { user, refreshAuth, userCompanies, company, loading: authLoading, isAuthenticated } = useAuth();
+  const {
+    user,
+    refreshAuth,
+    userCompanies,
+    company,
+    loading: authLoading,
+    isAuthenticated,
+  } = useAuth();
   const [invites, setInvites] = useState<InviteWithCompany[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -25,7 +32,7 @@ export default function ConvitesPage() {
   useEffect(() => {
     const checkAndRedirect = async () => {
       if (authLoading || !isAuthenticated || !user) return;
-      
+
       // Se já tem empresas, redirecionar para dashboard
       if (userCompanies.length > 0) {
         // Se não tem empresa selecionada, selecionar a primeira
@@ -33,7 +40,7 @@ export default function ConvitesPage() {
           try {
             await authService.switchCompany(userCompanies[0].companyId);
             await refreshAuth();
-            await new Promise(resolve => setTimeout(resolve, 100));
+            await new Promise((resolve) => setTimeout(resolve, 100));
           } catch (error) {
             console.error("Erro ao selecionar empresa:", error);
           }
@@ -44,7 +51,14 @@ export default function ConvitesPage() {
     };
 
     checkAndRedirect();
-  }, [authLoading, isAuthenticated, user, userCompanies.length, company, refreshAuth]);
+  }, [
+    authLoading,
+    isAuthenticated,
+    user,
+    userCompanies.length,
+    company,
+    refreshAuth,
+  ]);
 
   useEffect(() => {
     const loadInvites = async () => {
@@ -54,8 +68,10 @@ export default function ConvitesPage() {
         setLoading(true);
         // Expirar convites antigos primeiro
         await inviteService.expireOldInvites();
-        const pendingInvites = await inviteService.findPendingByEmail(user.email);
-        
+        const pendingInvites = await inviteService.findPendingByEmail(
+          user.email
+        );
+
         // Buscar dados das empresas
         const invitesWithCompanies = await Promise.all(
           pendingInvites.map(async (invite) => {
@@ -94,10 +110,10 @@ export default function ConvitesPage() {
       // Selecionar empresa aceita e atualizar autenticação
       await authService.switchCompany(invite.companyId);
       await refreshAuth();
-      
+
       // Aguardar um pouco para garantir que o estado seja atualizado
-      await new Promise(resolve => setTimeout(resolve, 100));
-      
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
       // Redirecionar para dashboard
       router.push("/dashboard");
     } catch (error: any) {
@@ -161,7 +177,9 @@ export default function ConvitesPage() {
           {loading ? (
             <div className="text-center py-12">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
-              <p className="mt-4 text-gray-600 dark:text-gray-400">Carregando convites...</p>
+              <p className="mt-4 text-gray-600 dark:text-gray-400">
+                Carregando convites...
+              </p>
             </div>
           ) : invites.length === 0 ? (
             <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-12 text-center">
@@ -210,15 +228,19 @@ export default function ConvitesPage() {
                         </p>
                         <p>
                           <span className="font-medium">Expira em:</span>{" "}
-                          {new Date(invite.expiresAt).toLocaleDateString("pt-BR", {
-                            day: "2-digit",
-                            month: "long",
-                            year: "numeric",
-                          })}
+                          {new Date(invite.expiresAt).toLocaleDateString(
+                            "pt-BR",
+                            {
+                              day: "2-digit",
+                              month: "long",
+                              year: "numeric",
+                            }
+                          )}
                         </p>
                         {invite.company?.email && (
                           <p>
-                            <span className="font-medium">Email:</span> {invite.company.email}
+                            <span className="font-medium">Email:</span>{" "}
+                            {invite.company.email}
                           </p>
                         )}
                       </div>
@@ -247,5 +269,3 @@ export default function ConvitesPage() {
     </div>
   );
 }
-
-
