@@ -327,6 +327,11 @@ export interface CreateFaturaDTO {
   titulo: string;
   valor: number;
   dataVencimento: string; // ISO date
+  periodoInicio?: string; // ISO date - início do período de faturamento
+  periodoFim?: string; // ISO date - fim do período de faturamento
+  horasTrabalhadas?: number;
+  tipoCalculo?: "horas" | "fixo";
+  valorPorHora?: number;
   observacoes?: string;
   recorrencia?: RecorrenciaDTO;
   lembretesIniciais?: CreateLembreteDTO[];

@@ -197,7 +197,7 @@ class FaturaService {
       }
 
       // Determinar tipo de cálculo e calcular valor
-      let tipoCalculo: "horas" | "fixo" = data.tipoCalculo || projeto.tipoCobranca || "fixo";
+      let tipoCalculo: "horas" | "fixo" = data.tipoCalculo || (projeto.tipoCobranca === "horas" ? "horas" : "fixo");
       let valor = data.valor;
       let valorPorHora = data.valorPorHora;
 

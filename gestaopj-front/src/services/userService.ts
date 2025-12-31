@@ -145,7 +145,13 @@ class UserService {
     return this.update(id, { active: true });
   }
 
-  async verifyPassword(user: User, password: string): Promise<boolean> {
+  // Nota: Este método não é mais usado - verificação de senha agora é feita no backend
+  // Mantido apenas para compatibilidade com código antigo que pode ainda usar localStorage
+  async verifyPassword(user: User & { passwordHash?: string }, password: string): Promise<boolean> {
+    if (!user.passwordHash) {
+      // Se não tem passwordHash, não pode verificar (usuário veio do backend)
+      return false;
+    }
     return this.verifyPasswordInternal(password, user.passwordHash);
   }
 }

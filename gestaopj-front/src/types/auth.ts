@@ -20,8 +20,5 @@ export interface RegisterDTO {
   password: string;
 }
 
-export interface LoginDTO {
-  email: string;
-  password: string;
-}
+// LoginDTO já está exportado em user.ts, não duplicar aqui
 

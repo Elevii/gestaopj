@@ -118,7 +118,6 @@ class FaturaEtapaStatusService {
   ): Promise<FaturaEtapaStatus> {
     const updateData: UpdateFaturaEtapaStatusDTO = {
       status,
-      updatedAt: new Date().toISOString(),
     };
 
     if (status === "aprovado" || status === "rejeitado") {

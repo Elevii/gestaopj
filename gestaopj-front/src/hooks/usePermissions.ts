@@ -20,6 +20,7 @@ export function usePermissions() {
   const permissions = useMemo(() => {
     if (!user || !currentRole)
       return {
+        currentRole: null,
         hasPermission: () => false,
         canCreateProject: false,
         canEditProject: false,
@@ -47,6 +48,7 @@ export function usePermissions() {
       };
 
     return {
+      currentRole,
       hasPermission: (permission: Permission) =>
         roleHasPermission(currentRole, permission),
       canCreateProject: roleHasPermission(currentRole, Permission.CREATE_PROJECT),

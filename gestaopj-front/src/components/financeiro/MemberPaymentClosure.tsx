@@ -449,10 +449,10 @@ export default function MemberPaymentClosure({ sharedSelectedPeriod, onPeriodCha
       );
     }
 
-    // Filtrar apenas membros sem fatura (status "sem_fatura")
+    // Filtrar apenas membros sem fatura
     filtered = filtered.filter((m) => {
-      // Se não tem fatura, considerar como "sem_fatura"
-      return !m.invoiceStatus || m.invoiceStatus === "sem_fatura";
+      // Se não tem fatura (invoiceStatus pode ser undefined ou null)
+      return !m.invoiceStatus;
     });
 
     return filtered;

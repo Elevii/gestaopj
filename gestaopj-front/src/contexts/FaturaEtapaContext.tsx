@@ -9,7 +9,7 @@ interface FaturaEtapaContextType {
   etapas: FaturaEtapa[];
   loading: boolean;
   loadEtapas: () => Promise<void>;
-  createEtapa: (data: CreateFaturaEtapaDTO) => Promise<FaturaEtapa>;
+  createEtapa: (data: Omit<CreateFaturaEtapaDTO, 'companyId'>) => Promise<FaturaEtapa>;
   updateEtapa: (id: string, data: UpdateFaturaEtapaDTO) => Promise<FaturaEtapa>;
   deleteEtapa: (id: string) => Promise<void>;
   reorderEtapas: (etapaIds: string[]) => Promise<void>;
@@ -46,7 +46,7 @@ export function FaturaEtapaProvider({ children }: { children: React.ReactNode })
   }, [loadEtapas]);
 
   const createEtapa = useCallback(
-    async (data: CreateFaturaEtapaDTO): Promise<FaturaEtapa> => {
+    async (data: Omit<CreateFaturaEtapaDTO, 'companyId'>): Promise<FaturaEtapa> => {
       if (!company) {
         throw new Error("Empresa não selecionada");
       }
