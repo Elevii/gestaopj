@@ -1,10 +1,23 @@
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
+// Log sempre para debug
+if (typeof window !== 'undefined') {
+  console.log('🔗 API Base URL configurada:', API_BASE_URL);
+  console.log('🔗 NEXT_PUBLIC_API_URL da env:', process.env.NEXT_PUBLIC_API_URL || 'NÃO DEFINIDA');
+  if (!process.env.NEXT_PUBLIC_API_URL) {
+    console.error('❌ ERRO: NEXT_PUBLIC_API_URL não está configurada! Configure no Vercel ou .env.local');
+    console.error('❌ Usando fallback localhost (não funcionará em produção):', API_BASE_URL);
+  }
+}
+
 class ApiClient {
   private baseURL: string;
 
   constructor(baseURL: string) {
     this.baseURL = baseURL;
+    if (typeof window !== 'undefined') {
+      console.log('📡 ApiClient inicializado com baseURL:', this.baseURL);
+    }
   }
 
   private getAuthToken(): string | null {

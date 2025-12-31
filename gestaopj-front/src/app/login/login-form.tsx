@@ -71,20 +71,31 @@ export default function LoginForm() {
     try {
       const result = await authService.login({ email, password });
       
+      console.log('✅ Login bem-sucedido:', {
+        hasUser: !!result.user,
+        companiesCount: result.companies.length,
+        hasCompany: !!result.company,
+      });
+      
       // Se não tem empresas, redirecionar para onboarding
       if (result.companies.length === 0) {
-        router.push("/onboarding");
+        console.log('🔄 Redirecionando para onboarding (sem empresas)');
+        // Usar window.location para garantir redirecionamento
+        window.location.href = "/onboarding";
         return;
       }
 
       // Se já tem empresa selecionada (login já seleciona automaticamente a primeira)
       if (result.company) {
-        router.push("/dashboard");
+        console.log('🔄 Redirecionando para dashboard (empresa selecionada:', result.company.id, ')');
+        // Usar window.location para garantir redirecionamento
+        window.location.href = "/dashboard";
         return;
       }
 
       // Se não tem empresa selecionada mas tem empresas disponíveis, mostrar seletor
       if (result.companies.length > 0) {
+        console.log('🔄 Mostrando seletor de empresas');
         // Buscar dados completos das empresas
         const companiesData = await Promise.all(
           result.companies.map((membership) =>
@@ -123,7 +134,9 @@ export default function LoginForm() {
     setSelectingCompany(true);
     try {
       await authService.switchCompany(companyId);
-      router.push("/dashboard");
+      console.log('🔄 Redirecionando para dashboard após selecionar empresa');
+      // Usar window.location para garantir redirecionamento
+      window.location.href = "/dashboard";
     } catch (error) {
       console.error("Erro ao selecionar empresa:", error);
       setSelectingCompany(false);
