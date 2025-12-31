@@ -4,7 +4,9 @@ import { AppModule } from './app.module';
 
 async function bootstrap() {
   try {
-    console.log('🚀 Starting NestJS application...');
+    console.log('═══════════════════════════════════════════════════════');
+    console.log('🚀🚀🚀 STARTING NESTJS APPLICATION - VERSION 2.0 🚀🚀🚀');
+    console.log('═══════════════════════════════════════════════════════');
     console.log('Environment:', process.env.NODE_ENV || 'development');
     
     // Validar variáveis críticas antes de iniciar
