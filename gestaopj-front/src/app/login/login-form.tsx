@@ -3,6 +3,7 @@
 import { useState, FormEvent, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import { useAuth } from "@/contexts/AuthContext";
 import { authService } from "@/services/authService";
 import { companyService } from "@/services/companyService";
 import { CompanyMembership } from "@/types/companyMembership";
@@ -11,6 +12,7 @@ import { Company } from "@/types/company";
 export default function LoginForm() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const { login: loginContext, userCompanies, company: currentCompany, refreshAuth } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -66,46 +68,56 @@ export default function LoginForm() {
       return;
     }
 
-    // Login usando authService
+    // Login usando AuthContext para garantir que o estado seja atualizado
     setIsLoading(true);
     try {
-      const result = await authService.login({ email, password });
+      // Primeiro faz login direto para obter os dados
+      const loginResult = await authService.login({ email, password });
+      
+      // Depois atualiza o contexto com os dados
+      await loginContext(email, password);
+      
+      // Aguardar para garantir que o contexto seja atualizado antes de redirecionar
+      await new Promise(resolve => setTimeout(resolve, 300));
       
       console.log('✅ Login bem-sucedido:', {
-        hasUser: !!result.user,
-        companiesCount: result.companies.length,
-        hasCompany: !!result.company,
+        hasUser: !!loginResult.user,
+        companiesCount: loginResult.companies.length,
+        hasCompany: !!loginResult.company,
       });
       
       // Se não tem empresas, redirecionar para onboarding
-      if (result.companies.length === 0) {
+      if (loginResult.companies.length === 0) {
         console.log('🔄 Redirecionando para onboarding (sem empresas)');
-        // Usar window.location para garantir redirecionamento
-        window.location.href = "/onboarding";
+        // Aguardar mais um pouco para garantir que o contexto seja atualizado na próxima página
+        setTimeout(() => {
+          window.location.href = "/onboarding";
+        }, 100);
         return;
       }
 
-      // Se já tem empresa selecionada (login já seleciona automaticamente a primeira)
-      if (result.company) {
-        console.log('🔄 Redirecionando para dashboard (empresa selecionada:', result.company.id, ')');
-        // Usar window.location para garantir redirecionamento
-        window.location.href = "/dashboard";
+      // Se já tem empresa selecionada, redirecionar para dashboard
+      if (loginResult.company) {
+        console.log('🔄 Redirecionando para dashboard (empresa selecionada:', loginResult.company.id, ')');
+        setTimeout(() => {
+          window.location.href = "/dashboard";
+        }, 100);
         return;
       }
 
       // Se não tem empresa selecionada mas tem empresas disponíveis, mostrar seletor
-      if (result.companies.length > 0) {
+      if (loginResult.companies.length > 0) {
         console.log('🔄 Mostrando seletor de empresas');
         // Buscar dados completos das empresas
         const companiesData = await Promise.all(
-          result.companies.map((membership) =>
+          loginResult.companies.map((membership) =>
             companyService.findById(membership.companyId)
           )
         );
         const validCompanies = companiesData.filter((c): c is Company => c !== null);
 
         setLoginResult({
-          companies: result.companies,
+          companies: loginResult.companies,
           companiesData: validCompanies,
         });
         setShowCompanySelector(true);
