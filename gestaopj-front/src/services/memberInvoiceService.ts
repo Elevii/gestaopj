@@ -55,7 +55,7 @@ class MemberInvoiceService {
     const now = new Date().toISOString();
 
     const invoiceId = `mi_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    
+
     // Preencher faturaId nos lembretes
     const lembretes = (data.lembretes || []).map((l) => ({
       ...l,
@@ -145,7 +145,10 @@ class MemberInvoiceService {
     const updatedInvoice: MemberInvoice = {
       ...invoices[index],
       status,
-      dataPagamento: status === "pago" ? (dataPagamento || new Date().toISOString()) : undefined,
+      dataPagamento:
+        status === "pago"
+          ? dataPagamento || new Date().toISOString()
+          : undefined,
       updatedAt: new Date().toISOString(),
     };
 
@@ -158,7 +161,7 @@ class MemberInvoiceService {
 
   async reopenInvoice(id: string): Promise<MemberInvoice> {
     await new Promise((resolve) => setTimeout(resolve, 300));
-    
+
     console.log(`🔄 Reabrindo fatura: ${id}`);
     const invoices = this.getInvoicesFromStorage();
     const invoice = invoices.find((i) => i.id === id);
@@ -180,4 +183,3 @@ class MemberInvoiceService {
 }
 
 export const memberInvoiceService = new MemberInvoiceService();
-

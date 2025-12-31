@@ -308,7 +308,11 @@ export interface Fatura {
   updatedAt: string;
 }
 
-export type FrequenciaRecorrencia = "semanal" | "quinzenal" | "mensal" | "anual";
+export type FrequenciaRecorrencia =
+  | "semanal"
+  | "quinzenal"
+  | "mensal"
+  | "anual";
 
 export interface RecorrenciaDTO {
   frequencia: FrequenciaRecorrencia;

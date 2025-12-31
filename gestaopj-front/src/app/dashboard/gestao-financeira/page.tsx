@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
@@ -13,7 +13,6 @@ import {
   startOfMonth,
   endOfMonth,
   addMonths,
-  subMonths,
   setDate,
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -88,49 +87,6 @@ function generateBillingPeriods(
   return periods;
 }
 
-// Função auxiliar para encontrar o período padrão (primeiro não pago)
-async function findDefaultPeriod(
-  availablePeriods: BillingPeriod[],
-  allInvoices: any[],
-  companyId: string
-): Promise<string | null> {
-  if (availablePeriods.length === 0) return null;
-
-  // Ordenar períodos por data (mais antigo primeiro)
-  const sortedPeriods = [...availablePeriods].sort(
-    (a, b) => new Date(a.inicio).getTime() - new Date(b.inicio).getTime()
-  );
-
-  // Encontrar o primeiro período que não está com status "pagamentos_realizados"
-  for (const period of sortedPeriods) {
-    const periodInvoices = allInvoices.filter(
-      (inv) =>
-        inv.companyId === companyId &&
-        inv.periodoInicio === period.inicio &&
-        inv.periodoFim === period.fim &&
-        inv.status !== "cancelado"
-    );
-
-    if (periodInvoices.length === 0) {
-      // Sem faturas, pode ser selecionado
-      return period.value;
-    }
-
-    // Verificar se todas as faturas estão pagas
-    const todasPagas = periodInvoices.every(
-      (inv) => inv.status === "pago" || inv.status === "pagamentos_realizados"
-    );
-
-    if (!todasPagas) {
-      // Período não está totalmente pago, selecionar
-      return period.value;
-    }
-  }
-
-  // Se todos os períodos estão pagos, selecionar o primeiro da lista ordenada
-  return sortedPeriods[0]?.value || null;
-}
-
 export default function GestaoFinanceiraPage() {
   const { userCompanies } = useAuth();
   const { company } = useCompany();
@@ -144,7 +100,11 @@ export default function GestaoFinanceiraPage() {
   const [selectedPeriod, setSelectedPeriod] = useState<string>("");
   const [sharedSelectedPeriod, setSharedSelectedPeriod] = useState<string>(""); // Período compartilhado entre abas
   const [showAddMembersModal, setShowAddMembersModal] = useState(false);
-  const [addMembersPeriod, setAddMembersPeriod] = useState<{ inicio: string; fim: string; memberIds: string[] }>({ inicio: "", fim: "", memberIds: [] });
+  const [addMembersPeriod, setAddMembersPeriod] = useState<{
+    inicio: string;
+    fim: string;
+    memberIds: string[];
+  }>({ inicio: "", fim: "", memberIds: [] });
 
   // Verificar se é owner ou admin
   const isOwnerOrAdmin = useMemo(() => {
@@ -168,7 +128,7 @@ export default function GestaoFinanceiraPage() {
   };
 
   // Carregar faturas de membros
-  const loadMemberInvoices = async () => {
+  const loadMemberInvoices = useCallback(async () => {
     if (!company || !isOwnerOrAdmin) return;
 
     try {
@@ -191,11 +151,11 @@ export default function GestaoFinanceiraPage() {
     } finally {
       setLoadingMemberInvoices(false);
     }
-  };
+  }, [company, isOwnerOrAdmin]);
 
   useEffect(() => {
     loadMemberInvoices();
-  }, [company, isOwnerOrAdmin]);
+  }, [loadMemberInvoices]);
 
   // Gerar períodos de faturamento disponíveis
   const availablePeriods = useMemo(() => {
@@ -255,8 +215,7 @@ export default function GestaoFinanceiraPage() {
         }
 
         const todasPagas = nonCanceledInvoices.every(
-          (inv) =>
-            inv.status === "pago" || inv.status === "pagamentos_realizados"
+          (inv) => inv.status === "pago"
         );
 
         if (!todasPagas) {
@@ -284,10 +243,14 @@ export default function GestaoFinanceiraPage() {
   // Sincronizar selectedPeriod com sharedSelectedPeriod quando mudar na aba "Faturas Geradas"
   // Apenas quando sharedSelectedPeriod mudar vindo do Fechamento ou quando a aba muda
   useEffect(() => {
-    if (activeTab === "faturas-geradas" && sharedSelectedPeriod && sharedSelectedPeriod !== selectedPeriod) {
+    if (
+      activeTab === "faturas-geradas" &&
+      sharedSelectedPeriod &&
+      sharedSelectedPeriod !== selectedPeriod
+    ) {
       setSelectedPeriod(sharedSelectedPeriod);
     }
-  }, [sharedSelectedPeriod, activeTab]); // selectedPeriod não está nas dependências para evitar loop
+  }, [sharedSelectedPeriod, activeTab, selectedPeriod]);
 
   // Agrupar faturas por período
   const invoicesByPeriod = useMemo(() => {
@@ -303,20 +266,17 @@ export default function GestaoFinanceiraPage() {
 
     // Converter para array e ordenar por período (mais recente primeiro)
     return Array.from(grouped.entries())
-      .map(([key, invoices]) => {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      .map(([_, invoices]) => {
         const totalValor = invoices.reduce((sum, inv) => sum + inv.valor, 0);
         const totalPago = invoices
-          .filter(
-            (inv) =>
-              inv.status === "pago" || inv.status === "pagamentos_realizados"
-          )
+          .filter((inv) => inv.status === "pago")
           .reduce((sum, inv) => sum + inv.valor, 0);
         const totalPendente = invoices
           .filter(
             (inv) =>
               inv.status === "pendente" ||
-              inv.status === "fatura_gerada" ||
-              inv.status === "atrasado"
+              inv.status === "fatura_gerada"
           )
           .reduce((sum, inv) => sum + inv.valor, 0);
 
@@ -327,16 +287,13 @@ export default function GestaoFinanceiraPage() {
         // Caso contrário, pendente
         let periodoStatus:
           | "fatura_gerada"
-          | "pagamentos_realizados"
+          | "pago"
           | "pendente"
           | "parcialmente_pago"
           | "cancelado";
         const todasPagas =
           invoices.length > 0 &&
-          invoices.every(
-            (inv) =>
-              inv.status === "pago" || inv.status === "pagamentos_realizados"
-          );
+          invoices.every((inv) => inv.status === "pago");
         const todasCanceladas =
           invoices.length > 0 &&
           invoices.every((inv) => inv.status === "cancelado");
@@ -344,17 +301,14 @@ export default function GestaoFinanceiraPage() {
           (inv) => inv.status === "fatura_gerada"
         );
         const temPendentes = invoices.some(
-          (inv) => inv.status === "pendente" || inv.status === "atrasado"
+          (inv) => inv.status === "pendente"
         );
-        const temPagas = invoices.some(
-          (inv) =>
-            inv.status === "pago" || inv.status === "pagamentos_realizados"
-        );
+        const temPagas = invoices.some((inv) => inv.status === "pago");
 
         if (todasCanceladas) {
           periodoStatus = "cancelado";
         } else if (todasPagas) {
-          periodoStatus = "pagamentos_realizados";
+          periodoStatus = "pago";
         } else if (temGeradas && !temPendentes && !temPagas) {
           periodoStatus = "fatura_gerada";
         } else if (temPagas && (temPendentes || temGeradas)) {
@@ -441,7 +395,7 @@ export default function GestaoFinanceiraPage() {
       {/* Conteúdo das Abas */}
       {activeTab === "fechamento" ? (
         <div className="mb-8">
-          <MemberPaymentClosure 
+          <MemberPaymentClosure
             sharedSelectedPeriod={sharedSelectedPeriod}
             onPeriodChange={(period) => setSharedSelectedPeriod(period)}
           />
@@ -549,7 +503,7 @@ export default function GestaoFinanceiraPage() {
                     </tr>
                   </thead>
                   <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                    {filteredInvoicesByPeriod.map((group, index) => (
+                    {filteredInvoicesByPeriod.map((group) => (
                       <tr
                         key={`${group.periodoInicio}_${group.periodoFim}`}
                         className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
@@ -570,7 +524,7 @@ export default function GestaoFinanceiraPage() {
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span
                             className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                              group.status === "pagamentos_realizados"
+                              group.status === "pago"
                                 ? "bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300"
                                 : group.status === "fatura_gerada"
                                   ? "bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300"
@@ -581,8 +535,8 @@ export default function GestaoFinanceiraPage() {
                                       : "bg-orange-100 text-orange-800 dark:bg-orange-900/50 dark:text-orange-300"
                             }`}
                           >
-                            {group.status === "pagamentos_realizados"
-                              ? "Pagamentos Realizados"
+                            {group.status === "pago"
+                              ? "Pago"
                               : group.status === "fatura_gerada"
                                 ? "Fatura Gerada"
                                 : group.status === "parcialmente_pago"
@@ -616,7 +570,9 @@ export default function GestaoFinanceiraPage() {
                                   setAddMembersPeriod({
                                     inicio: group.periodoInicio,
                                     fim: group.periodoFim,
-                                    memberIds: group.invoices.map((inv) => inv.userId),
+                                    memberIds: group.invoices.map(
+                                      (inv) => inv.userId
+                                    ),
                                   });
                                   setShowAddMembersModal(true);
                                 }}
@@ -655,141 +611,139 @@ export default function GestaoFinanceiraPage() {
             )}
           </div>
 
-            {/* Listagem detalhada de membros do período selecionado */}
-            {filteredInvoicesByPeriod.length > 0 && (
-              <div className="mt-6 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
-                <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 ">
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                    {selectedPeriod
-                      ? `Membros do Período (${format(parseISO(filteredInvoicesByPeriod[0]?.periodoInicio || ""), "dd/MM/yyyy", { locale: ptBR })} a ${format(parseISO(filteredInvoicesByPeriod[0]?.periodoFim || ""), "dd/MM/yyyy", { locale: ptBR })})`
-                      : "Todos os Membros"}
-                  </h3>
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                    <thead className="bg-gray-50 dark:bg-gray-900">
-                      <tr>
-                        <th
-                          scope="col"
-                          className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
-                        >
-                          Membro
-                        </th>
-                        {!selectedPeriod && (
-                          <th
-                            scope="col"
-                            className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
-                          >
-                            Período
-                          </th>
-                        )}
-                        <th
-                          scope="col"
-                          className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
-                        >
-                          Valor
-                        </th>
-                        <th
-                          scope="col"
-                          className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
-                        >
-                          Pago
-                        </th>
-                        <th
-                          scope="col"
-                          className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
-                        >
-                          Status
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                      {(selectedPeriod
-                        ? filteredInvoicesByPeriod[0]?.invoices
-                        : filteredInvoicesByPeriod.flatMap((g) => g.invoices)
-                      )?.map((invoice) => {
-                        const user = users.get(invoice.userId);
-                        const isPaid =
-                          invoice.status === "pago" ||
-                          invoice.status === "pagamentos_realizados";
-                        return (
-                          <tr
-                            key={invoice.id}
-                            className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
-                          >
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="text-sm font-medium text-gray-900 dark:text-white">
-                                {user?.name || "Usuário não encontrado"}
-                              </div>
-                              <div className="text-xs text-gray-500 dark:text-gray-400">
-                                {user?.email || "-"}
-                              </div>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                              {!selectedPeriod && (
-                                <div>
-                                  {format(
-                                    parseISO(invoice.periodoInicio),
-                                    "dd/MM/yyyy",
-                                    { locale: ptBR }
-                                  )}{" "}
-                                  a{" "}
-                                  {format(
-                                    parseISO(invoice.periodoFim),
-                                    "dd/MM/yyyy",
-                                    { locale: ptBR }
-                                  )}
-                                </div>
-                              )}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
-                              {formatCurrency(invoice.valor)}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <span
-                                className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                                  isPaid
-                                    ? "bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300"
-                                    : "bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300"
-                                }`}
-                              >
-                                {isPaid ? "Sim" : "Não"}
-                              </span>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <span
-                                className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                                  isPaid
-                                    ? "bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300"
-                                    : invoice.status === "cancelado"
-                                      ? "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300"
-                                      : invoice.status === "atrasado"
-                                        ? "bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300"
-                                        : invoice.status === "fatura_gerada"
-                                          ? "bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300"
-                                          : "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-300"
-                                }`}
-                              >
-                                {invoice.status === "pago" ||
-                                invoice.status === "pagamentos_realizados"
-                                  ? "Pagamentos Realizados"
-                                  : invoice.status === "cancelado"
-                                    ? "Cancelado"
-                                    : invoice.status === "atrasado"
-                                      ? "Atrasado"
-                                      : invoice.status === "fatura_gerada"
-                                        ? "Fatura Gerada"
-                                        : "Pendente"}
-                              </span>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+          {/* Listagem detalhada de membros do período selecionado */}
+          {filteredInvoicesByPeriod.length > 0 && (
+            <div className="mt-6 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+              <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 ">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                  {selectedPeriod
+                    ? `Membros do Período (${format(parseISO(filteredInvoicesByPeriod[0]?.periodoInicio || ""), "dd/MM/yyyy", { locale: ptBR })} a ${format(parseISO(filteredInvoicesByPeriod[0]?.periodoFim || ""), "dd/MM/yyyy", { locale: ptBR })})`
+                    : "Todos os Membros"}
+                </h3>
               </div>
-            )}
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                  <thead className="bg-gray-50 dark:bg-gray-900">
+                    <tr>
+                      <th
+                        scope="col"
+                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
+                      >
+                        Membro
+                      </th>
+                      {!selectedPeriod && (
+                        <th
+                          scope="col"
+                          className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
+                        >
+                          Período
+                        </th>
+                      )}
+                      <th
+                        scope="col"
+                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
+                      >
+                        Valor
+                      </th>
+                      <th
+                        scope="col"
+                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
+                      >
+                        Pago
+                      </th>
+                      <th
+                        scope="col"
+                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
+                      >
+                        Status
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                    {(selectedPeriod
+                      ? filteredInvoicesByPeriod[0]?.invoices
+                      : filteredInvoicesByPeriod.flatMap((g) => g.invoices)
+                    )?.map((invoice) => {
+                      const user = users.get(invoice.userId);
+                      const isPaid = invoice.status === "pago";
+                      const isLate = invoice.status !== "pago" && invoice.status !== "cancelado" && new Date(invoice.dataVencimento) < new Date();
+                      return (
+                        <tr
+                          key={invoice.id}
+                          className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+                        >
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm font-medium text-gray-900 dark:text-white">
+                              {user?.name || "Usuário não encontrado"}
+                            </div>
+                            <div className="text-xs text-gray-500 dark:text-gray-400">
+                              {user?.email || "-"}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                            {!selectedPeriod && (
+                              <div>
+                                {format(
+                                  parseISO(invoice.periodoInicio),
+                                  "dd/MM/yyyy",
+                                  { locale: ptBR }
+                                )}{" "}
+                                a{" "}
+                                {format(
+                                  parseISO(invoice.periodoFim),
+                                  "dd/MM/yyyy",
+                                  { locale: ptBR }
+                                )}
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
+                            {formatCurrency(invoice.valor)}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span
+                              className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                                isPaid
+                                  ? "bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300"
+                                  : "bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300"
+                              }`}
+                            >
+                              {isPaid ? "Sim" : "Não"}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span
+                              className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                                isPaid
+                                  ? "bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300"
+                                  : invoice.status === "cancelado"
+                                    ? "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300"
+                                    : isLate
+                                      ? "bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300"
+                                      : invoice.status === "fatura_gerada"
+                                        ? "bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300"
+                                        : "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-300"
+                              }`}
+                            >
+                              {isPaid
+                                ? "Pago"
+                                : invoice.status === "cancelado"
+                                  ? "Cancelado"
+                                  : isLate
+                                    ? "Atrasado"
+                                    : invoice.status === "fatura_gerada"
+                                      ? "Fatura Gerada"
+                                      : "Pendente"}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

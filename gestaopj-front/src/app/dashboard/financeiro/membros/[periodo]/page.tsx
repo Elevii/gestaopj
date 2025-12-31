@@ -33,8 +33,10 @@ export default function MemberInvoicesDetailPage() {
   const [showAddMembersModal, setShowAddMembersModal] = useState(false);
   const [showReopenModal, setShowReopenModal] = useState(false);
   const [showBulkPaymentModal, setShowBulkPaymentModal] = useState(false);
-  const [actionLoading, setActionLoading] = useState<{ [key: string]: boolean }>({});
-  
+  const [actionLoading, setActionLoading] = useState<{
+    [key: string]: boolean;
+  }>({});
+
   // Filtros
   const [searchName, setSearchName] = useState("");
   const [filterStatus, setFilterStatus] = useState<StatusFatura | "all">("all");
@@ -50,8 +52,10 @@ export default function MemberInvoicesDetailPage() {
     const loadInvoices = async () => {
       try {
         setLoading(true);
-        const allInvoices = await memberInvoiceService.findByCompanyId(company.id);
-        
+        const allInvoices = await memberInvoiceService.findByCompanyId(
+          company.id
+        );
+
         // Filtrar faturas do período
         const periodInvoices = allInvoices.filter(
           (inv) =>
@@ -102,7 +106,10 @@ export default function MemberInvoicesDetailPage() {
         const searchLower = searchName.toLowerCase();
         const userName = invoice.user?.name?.toLowerCase() || "";
         const userEmail = invoice.user?.email?.toLowerCase() || "";
-        if (!userName.includes(searchLower) && !userEmail.includes(searchLower)) {
+        if (
+          !userName.includes(searchLower) &&
+          !userEmail.includes(searchLower)
+        ) {
           return false;
         }
       }
@@ -124,7 +131,10 @@ export default function MemberInvoicesDetailPage() {
         acc.total += inv.valor;
         if (inv.status === "pago") {
           acc.pago += inv.valor;
-        } else if (inv.status === "pendente" || inv.status === "fatura_gerada") {
+        } else if (
+          inv.status === "pendente" ||
+          inv.status === "fatura_gerada"
+        ) {
           acc.pendente += inv.valor;
         }
         return acc;
@@ -139,8 +149,10 @@ export default function MemberInvoicesDetailPage() {
 
     try {
       setLoading(true);
-      const allInvoices = await memberInvoiceService.findByCompanyId(company.id);
-      
+      const allInvoices = await memberInvoiceService.findByCompanyId(
+        company.id
+      );
+
       const periodInvoices = allInvoices.filter(
         (inv) =>
           inv.periodoInicio === periodoInicio && inv.periodoFim === periodoFim
@@ -243,15 +255,16 @@ export default function MemberInvoicesDetailPage() {
 
   // Verificar se todas as faturas estão pagas
   const allInvoicesPaid = useMemo(() => {
-    return invoices.every(
-      (inv) => inv.status === "pago"
-    );
+    return invoices.every((inv) => inv.status === "pago");
   }, [invoices]);
 
   // Reabrir período (mudar todas as faturas de "pago" para "pendente")
   const handleReopenPeriod = async () => {
     if (!allInvoicesPaid) {
-      showToast("Só é possível reabrir um período quando todas as faturas estiverem pagas", "warning");
+      showToast(
+        "Só é possível reabrir um período quando todas as faturas estiverem pagas",
+        "warning"
+      );
       return;
     }
 
@@ -266,7 +279,10 @@ export default function MemberInvoicesDetailPage() {
       );
 
       console.log("✅ Período reaberto com sucesso");
-      showToast("Período reaberto! Todas as faturas voltaram para 'Pendente'", "success");
+      showToast(
+        "Período reaberto! Todas as faturas voltaram para 'Pendente'",
+        "success"
+      );
       await reloadInvoices();
     } catch (error) {
       console.error("Erro ao reabrir período:", error);
@@ -287,7 +303,9 @@ export default function MemberInvoicesDetailPage() {
   if (loading) {
     return (
       <div className="p-6">
-        <p className="text-gray-600 dark:text-gray-400">Carregando detalhes...</p>
+        <p className="text-gray-600 dark:text-gray-400">
+          Carregando detalhes...
+        </p>
       </div>
     );
   }
@@ -338,7 +356,8 @@ export default function MemberInvoicesDetailPage() {
             Detalhamento de Faturas de Membros
           </h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Período: {format(parseISO(periodoInicio), "dd/MM/yyyy", { locale: ptBR })} a{" "}
+            Período:{" "}
+            {format(parseISO(periodoInicio), "dd/MM/yyyy", { locale: ptBR })} a{" "}
             {format(parseISO(periodoFim), "dd/MM/yyyy", { locale: ptBR })}
           </p>
         </div>
@@ -399,9 +418,24 @@ export default function MemberInvoicesDetailPage() {
               className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {actionLoading.bulk ? (
-                <svg className="animate-spin h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                <svg
+                  className="animate-spin h-5 w-5 mr-2"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  />
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  />
                 </svg>
               ) : (
                 <svg
@@ -437,10 +471,11 @@ export default function MemberInvoicesDetailPage() {
         <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-              Faturas ({filteredInvoices.length} {filteredInvoices.length === 1 ? "membro" : "membros"})
+              Faturas ({filteredInvoices.length}{" "}
+              {filteredInvoices.length === 1 ? "membro" : "membros"})
             </h2>
           </div>
-          
+
           {/* Filtros */}
           <InvoiceFilters
             searchName={searchName}
@@ -516,7 +551,8 @@ export default function MemberInvoicesDetailPage() {
             <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
               {filteredInvoices.map((invoice) => {
                 const isLate =
-                  invoice.status !== "pago" && invoice.status !== "cancelado" &&
+                  invoice.status !== "pago" &&
+                  invoice.status !== "cancelado" &&
                   parseISO(invoice.dataVencimento) < new Date();
 
                 return (
@@ -537,16 +573,18 @@ export default function MemberInvoicesDetailPage() {
                         <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300">
                           {invoice.tipoCalculo === "horas" ? "Horista" : "Fixo"}
                         </span>
-                        {invoice.tipoCalculo === "horas" && invoice.valorPorHora && (
-                          <span className="text-xs text-gray-500 dark:text-gray-400">
-                            {formatCurrency(invoice.valorPorHora)}/h
-                          </span>
-                        )}
-                        {invoice.tipoCalculo === "fixo" && invoice.valorFixo && (
-                          <span className="text-xs text-gray-500 dark:text-gray-400">
-                            Fixo: {formatCurrency(invoice.valorFixo)}
-                          </span>
-                        )}
+                        {invoice.tipoCalculo === "horas" &&
+                          invoice.valorPorHora && (
+                            <span className="text-xs text-gray-500 dark:text-gray-400">
+                              {formatCurrency(invoice.valorPorHora)}/h
+                            </span>
+                          )}
+                        {invoice.tipoCalculo === "fixo" &&
+                          invoice.valorFixo && (
+                            <span className="text-xs text-gray-500 dark:text-gray-400">
+                              Fixo: {formatCurrency(invoice.valorFixo)}
+                            </span>
+                          )}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
@@ -586,9 +624,7 @@ export default function MemberInvoicesDetailPage() {
                             : "bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300"
                         }`}
                       >
-                        {invoice.status === "pago"
-                          ? "Sim"
-                          : "Não"}
+                        {invoice.status === "pago" ? "Sim" : "Não"}
                       </span>
                       {invoice.dataPagamento && (
                         <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
@@ -603,63 +639,81 @@ export default function MemberInvoicesDetailPage() {
                             invoice.status === "pago"
                               ? "bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300"
                               : invoice.status === "cancelado"
-                              ? "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300"
-                              : isLate
-                              ? "bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300"
-                              : invoice.status === "fatura_gerada"
-                              ? "bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300"
-                              : "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-300"
+                                ? "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300"
+                                : isLate
+                                  ? "bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300"
+                                  : invoice.status === "fatura_gerada"
+                                    ? "bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300"
+                                    : "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-300"
                           }`}
                         >
                           {invoice.status === "pago"
                             ? "Pago"
                             : invoice.status === "cancelado"
-                            ? "Cancelado"
-                            : isLate
-                            ? "Atrasado"
-                            : invoice.status === "fatura_gerada"
-                            ? "Fatura Gerada"
-                            : "Pendente"}
+                              ? "Cancelado"
+                              : isLate
+                                ? "Atrasado"
+                                : invoice.status === "fatura_gerada"
+                                  ? "Fatura Gerada"
+                                  : "Pendente"}
                         </span>
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <div className="flex items-center justify-end gap-2">
-                        {invoice.status !== "pago" && invoice.status !== "cancelado" && (
-                          <>
-                            <button
-                              onClick={() => handlePayment(invoice.id)}
-                              disabled={!!actionLoading[invoice.id]}
-                              className="text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300 font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
-                              title="Marcar como pago"
-                            >
-                              {actionLoading[invoice.id] ? (
-                                <>
-                                  <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                                  </svg>
-                                  <span className="text-xs">...</span>
-                                </>
-                              ) : (
-                                "Pagar"
-                              )}
-                            </button>
-                            <button
-                              onClick={() => handleCancel(invoice.id)}
-                              disabled={!!actionLoading[invoice.id]}
-                              className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                              title="Cancelar fatura"
-                            >
-                              Cancelar
-                            </button>
-                          </>
-                        )}
+                        {invoice.status !== "pago" &&
+                          invoice.status !== "cancelado" && (
+                            <>
+                              <button
+                                onClick={() => handlePayment(invoice.id)}
+                                disabled={!!actionLoading[invoice.id]}
+                                className="text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300 font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                                title="Marcar como pago"
+                              >
+                                {actionLoading[invoice.id] ? (
+                                  <>
+                                    <svg
+                                      className="animate-spin h-4 w-4"
+                                      fill="none"
+                                      viewBox="0 0 24 24"
+                                    >
+                                      <circle
+                                        className="opacity-25"
+                                        cx="12"
+                                        cy="12"
+                                        r="10"
+                                        stroke="currentColor"
+                                        strokeWidth="4"
+                                      />
+                                      <path
+                                        className="opacity-75"
+                                        fill="currentColor"
+                                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                                      />
+                                    </svg>
+                                    <span className="text-xs">...</span>
+                                  </>
+                                ) : (
+                                  "Pagar"
+                                )}
+                              </button>
+                              <button
+                                onClick={() => handleCancel(invoice.id)}
+                                disabled={!!actionLoading[invoice.id]}
+                                className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                                title="Cancelar fatura"
+                              >
+                                Cancelar
+                              </button>
+                            </>
+                          )}
                         {invoice.status === "pago" && (
                           <span className="text-gray-400 text-xs">Pago</span>
                         )}
                         {invoice.status === "cancelado" && (
-                          <span className="text-gray-400 text-xs">Cancelado</span>
+                          <span className="text-gray-400 text-xs">
+                            Cancelado
+                          </span>
                         )}
                       </div>
                     </td>
@@ -703,4 +757,3 @@ export default function MemberInvoicesDetailPage() {
     </div>
   );
 }
-

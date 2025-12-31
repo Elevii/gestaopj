@@ -18,7 +18,8 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "AtuaPJ - Gestão de Profissionais PJ",
-  description: "Plataforma de gestão de profissionais PJ que ajuda empresas a organizar, acompanhar e comprovar a atuação dos seus prestadores de serviço",
+  description:
+    "Plataforma de gestão de profissionais PJ que ajuda empresas a organizar, acompanhar e comprovar a atuação dos seus prestadores de serviço",
 };
 
 export default function RootLayout({

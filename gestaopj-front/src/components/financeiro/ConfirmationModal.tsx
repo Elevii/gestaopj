@@ -67,14 +67,17 @@ export function ConfirmationModal({
     },
   };
 
-  const isConfirmDisabled = requireTypedConfirmation && typedText !== confirmationWord;
+  const isConfirmDisabled =
+    requireTypedConfirmation && typedText !== confirmationWord;
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-md w-full border border-gray-200 dark:border-gray-700 animate-scale-in">
         <div className="p-6">
           <div className="flex items-start gap-4">
-            <div className={`flex-shrink-0 p-3 rounded-full ${colors[type].bg}`}>
+            <div
+              className={`flex-shrink-0 p-3 rounded-full ${colors[type].bg}`}
+            >
               <svg
                 className={`w-6 h-6 ${colors[type].icon}`}
                 fill="none"
@@ -100,7 +103,11 @@ export function ConfirmationModal({
               {requireTypedConfirmation && (
                 <div className="mt-4">
                   <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">
-                    Digite <span className="font-bold text-gray-900 dark:text-white">{confirmationWord}</span> para confirmar:
+                    Digite{" "}
+                    <span className="font-bold text-gray-900 dark:text-white">
+                      {confirmationWord}
+                    </span>{" "}
+                    para confirmar:
                   </label>
                   <input
                     type="text"
@@ -136,9 +143,24 @@ export function ConfirmationModal({
             `}
           >
             {loading && (
-              <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+              <svg
+                className="animate-spin h-4 w-4"
+                fill="none"
+                viewBox="0 0 24 24"
+              >
+                <circle
+                  className="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  strokeWidth="4"
+                />
+                <path
+                  className="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                />
               </svg>
             )}
             {confirmText}

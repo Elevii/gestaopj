@@ -31,7 +31,9 @@ export default function AddMembersToInvoiceModal({
   const { showToast } = useToast();
   const [availableMembers, setAvailableMembers] = useState<User[]>([]);
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
-  const [memberValues, setMemberValues] = useState<{ [userId: string]: string }>({}); // Valores por membro
+  const [memberValues, setMemberValues] = useState<{
+    [userId: string]: string;
+  }>({}); // Valores por membro
   const [loading, setLoading] = useState(false);
   const [adding, setAdding] = useState(false);
 
@@ -50,7 +52,9 @@ export default function AddMembersToInvoiceModal({
         setLoading(true);
 
         // Buscar todos os membros da empresa
-        const memberships = await companyMembershipService.findByCompanyId(company.id);
+        const memberships = await companyMembershipService.findByCompanyId(
+          company.id
+        );
         const activeMembers = memberships.filter((m) => m.active);
 
         // Buscar dados dos usuários que não estão na fatura
@@ -110,7 +114,9 @@ export default function AddMembersToInvoiceModal({
   }, [selectedMembers, memberValues]);
 
   const hasInvalidValues = useMemo(() => {
-    return selectedMembers.some((userId) => parseValue(memberValues[userId] || "0") <= 0);
+    return selectedMembers.some(
+      (userId) => parseValue(memberValues[userId] || "0") <= 0
+    );
   }, [selectedMembers, memberValues]);
 
   const handleToggleAll = () => {
@@ -135,14 +141,19 @@ export default function AddMembersToInvoiceModal({
     }
 
     if (hasInvalidValues) {
-      showToast("Todos os membros selecionados devem ter valores maiores que R$ 0,00", "error");
+      showToast(
+        "Todos os membros selecionados devem ter valores maiores que R$ 0,00",
+        "error"
+      );
       return;
     }
 
     try {
       setAdding(true);
 
-      console.log(`➕ Adicionando ${selectedMembers.length} membros à fatura do período`);
+      console.log(
+        `➕ Adicionando ${selectedMembers.length} membros à fatura do período`
+      );
 
       // Criar faturas para os membros selecionados com valores definidos
       const promises = selectedMembers.map((userId) => {
@@ -198,16 +209,29 @@ export default function AddMembersToInvoiceModal({
                 Adicionar Membros à Fatura
               </h2>
               <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-                Período: {format(parseISO(periodoInicio), "dd/MM/yyyy", { locale: ptBR })} a{" "}
-                {format(parseISO(periodoFim), "dd/MM/yyyy", { locale: ptBR })}
+                Período:{" "}
+                {format(parseISO(periodoInicio), "dd/MM/yyyy", {
+                  locale: ptBR,
+                })}{" "}
+                a {format(parseISO(periodoFim), "dd/MM/yyyy", { locale: ptBR })}
               </p>
             </div>
             <button
               onClick={handleClose}
               className="text-gray-400 hover:text-gray-500 dark:hover:text-gray-300"
             >
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              <svg
+                className="w-6 h-6"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M6 18L18 6M6 6l12 12"
+                />
               </svg>
             </button>
           </div>
@@ -217,7 +241,9 @@ export default function AddMembersToInvoiceModal({
         <div className="px-6 py-4 overflow-y-auto max-h-[calc(90vh-200px)]">
           {loading ? (
             <div className="py-8 text-center">
-              <p className="text-gray-600 dark:text-gray-400">Carregando membros...</p>
+              <p className="text-gray-600 dark:text-gray-400">
+                Carregando membros...
+              </p>
             </div>
           ) : availableMembers.length === 0 ? (
             <div className="py-8 text-center">
@@ -304,7 +330,9 @@ export default function AddMembersToInvoiceModal({
                                 <input
                                   type="text"
                                   value={value}
-                                  onChange={(e) => handleValueChange(member.id, e.target.value)}
+                                  onChange={(e) =>
+                                    handleValueChange(member.id, e.target.value)
+                                  }
                                   placeholder="0,00"
                                   className={`
                                     w-full pl-10 pr-3 py-2 text-sm rounded-lg transition-all
@@ -366,7 +394,11 @@ export default function AddMembersToInvoiceModal({
                   {hasInvalidValues && (
                     <div className="mt-3 pt-3 border-t border-red-200 dark:border-red-800">
                       <p className="text-xs text-red-600 dark:text-red-400 flex items-center gap-2">
-                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                        <svg
+                          className="w-4 h-4"
+                          fill="currentColor"
+                          viewBox="0 0 20 20"
+                        >
                           <path
                             fillRule="evenodd"
                             d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
@@ -394,7 +426,9 @@ export default function AddMembersToInvoiceModal({
           </button>
           <button
             onClick={handleAddMembers}
-            disabled={adding || selectedMembers.length === 0 || hasInvalidValues}
+            disabled={
+              adding || selectedMembers.length === 0 || hasInvalidValues
+            }
             className="
               px-6 py-2 text-sm font-medium text-white rounded-lg transition-all
               bg-indigo-600 hover:bg-indigo-700
@@ -404,9 +438,24 @@ export default function AddMembersToInvoiceModal({
             "
           >
             {adding && (
-              <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+              <svg
+                className="animate-spin h-4 w-4"
+                fill="none"
+                viewBox="0 0 24 24"
+              >
+                <circle
+                  className="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  strokeWidth="4"
+                />
+                <path
+                  className="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                />
               </svg>
             )}
             {adding ? "Adicionando..." : "Adicionar Membros"}
