@@ -159,6 +159,17 @@ A autenticação está integrada entre frontend e backend:
 - Tokens JWT são armazenados no localStorage do frontend
 - Tokens expiram em 7 dias (configurável via `JWT_EXPIRES_IN`)
 
+## 🚂 Deploy no Railway
+
+Para fazer deploy no Railway, consulte o guia completo em [RAILWAY_SETUP.md](RAILWAY_SETUP.md)
+
+Resumo rápido:
+1. Crie um projeto PostgreSQL no Railway
+2. Configure o backend com as variáveis de ambiente necessárias
+3. Configure o frontend com `NEXT_PUBLIC_API_URL` apontando para o backend
+4. Execute as migrações do Prisma
+5. Teste os endpoints
+
 ## 📌 Observações
 
 - O projeto está configurado para desenvolvimento local
@@ -167,4 +178,5 @@ A autenticação está integrada entre frontend e backend:
 - Código formatado com Prettier e validado com ESLint
 - **Importante**: Configure as variáveis de ambiente antes de executar o projeto
 - Certifique-se de que o PostgreSQL está rodando antes de iniciar o backend
+- Para produção, use um `JWT_SECRET` seguro (gere com `openssl rand -base64 32`)
 
