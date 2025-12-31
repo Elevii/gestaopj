@@ -17,9 +17,11 @@ import * as jwt from 'jsonwebtoken';
       useFactory: (configService: ConfigService) => {
         const secret = configService.get<string>('JWT_SECRET');
         if (!secret) {
+          console.error('❌ JWT_SECRET não está definido nas variáveis de ambiente');
           throw new Error('JWT_SECRET não está definido nas variáveis de ambiente');
         }
         const expiresIn = configService.get<string>('JWT_EXPIRES_IN') || '7d';
+        console.log('✅ JWT Module configured (expiresIn:', expiresIn, ')');
         return {
           secret,
           signOptions: {
