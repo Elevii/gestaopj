@@ -3,6 +3,7 @@ import {
   CreateMemberInvoiceDTO,
   UpdateMemberInvoiceDTO,
 } from "@/types/memberInvoice";
+import { StatusFatura } from "@/types";
 
 class MemberInvoiceService {
   private storageKey = "gestaopj_member_invoices";
@@ -125,6 +126,56 @@ class MemberInvoiceService {
     const invoices = this.getInvoicesFromStorage();
     const filtered = invoices.filter((i) => i.id !== id);
     this.saveInvoicesToStorage(filtered);
+  }
+
+  async updateStatus(
+    id: string,
+    status: StatusFatura,
+    dataPagamento?: string
+  ): Promise<MemberInvoice> {
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    const invoices = this.getInvoicesFromStorage();
+    const index = invoices.findIndex((i) => i.id === id);
+
+    if (index === -1) {
+      throw new Error("Fatura não encontrada");
+    }
+
+    const updatedInvoice: MemberInvoice = {
+      ...invoices[index],
+      status,
+      dataPagamento: status === "pago" ? (dataPagamento || new Date().toISOString()) : undefined,
+      updatedAt: new Date().toISOString(),
+    };
+
+    invoices[index] = updatedInvoice;
+    this.saveInvoicesToStorage(invoices);
+
+    console.log(`✅ Status da fatura atualizado: ${id} -> ${status}`);
+    return updatedInvoice;
+  }
+
+  async reopenInvoice(id: string): Promise<MemberInvoice> {
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    
+    console.log(`🔄 Reabrindo fatura: ${id}`);
+    const invoices = this.getInvoicesFromStorage();
+    const invoice = invoices.find((i) => i.id === id);
+
+    if (!invoice) {
+      throw new Error("Fatura não encontrada");
+    }
+
+    if (invoice.status !== "pago") {
+      throw new Error("Apenas faturas pagas podem ser reabertas");
+    }
+
+    return this.updateStatus(id, "pendente");
+  }
+
+  getAll(): MemberInvoice[] {
+    return this.getInvoicesFromStorage();
   }
 }
 

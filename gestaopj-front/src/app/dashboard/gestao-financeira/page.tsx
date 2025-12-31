@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCompany } from "@/contexts/CompanyContext";
 import MemberPaymentClosure from "@/components/financeiro/MemberPaymentClosure";
+import AddMembersToInvoiceModal from "@/components/financeiro/AddMembersToInvoiceModal";
 import {
   format,
   parseISO,
@@ -142,6 +143,8 @@ export default function GestaoFinanceiraPage() {
   );
   const [selectedPeriod, setSelectedPeriod] = useState<string>("");
   const [sharedSelectedPeriod, setSharedSelectedPeriod] = useState<string>(""); // Período compartilhado entre abas
+  const [showAddMembersModal, setShowAddMembersModal] = useState(false);
+  const [addMembersPeriod, setAddMembersPeriod] = useState<{ inicio: string; fim: string; memberIds: string[] }>({ inicio: "", fim: "", memberIds: [] });
 
   // Verificar se é owner ou admin
   const isOwnerOrAdmin = useMemo(() => {
@@ -165,32 +168,32 @@ export default function GestaoFinanceiraPage() {
   };
 
   // Carregar faturas de membros
-  useEffect(() => {
+  const loadMemberInvoices = async () => {
     if (!company || !isOwnerOrAdmin) return;
 
-    const loadMemberInvoices = async () => {
-      try {
-        setLoadingMemberInvoices(true);
-        const invoices = await memberInvoiceService.findByCompanyId(company.id);
-        setMemberInvoices(invoices);
+    try {
+      setLoadingMemberInvoices(true);
+      const invoices = await memberInvoiceService.findByCompanyId(company.id);
+      setMemberInvoices(invoices);
 
-        // Carregar informações dos usuários
-        const userIds = [...new Set(invoices.map((inv) => inv.userId))];
-        const usersMap = new Map<string, User>();
-        for (const userId of userIds) {
-          const user = await userService.findById(userId);
-          if (user) {
-            usersMap.set(userId, user);
-          }
+      // Carregar informações dos usuários
+      const userIds = [...new Set(invoices.map((inv) => inv.userId))];
+      const usersMap = new Map<string, User>();
+      for (const userId of userIds) {
+        const user = await userService.findById(userId);
+        if (user) {
+          usersMap.set(userId, user);
         }
-        setUsers(usersMap);
-      } catch (error) {
-        console.error("Erro ao carregar faturas de membros:", error);
-      } finally {
-        setLoadingMemberInvoices(false);
       }
-    };
+      setUsers(usersMap);
+    } catch (error) {
+      console.error("Erro ao carregar faturas de membros:", error);
+    } finally {
+      setLoadingMemberInvoices(false);
+    }
+  };
 
+  useEffect(() => {
     loadMemberInvoices();
   }, [company, isOwnerOrAdmin]);
 
@@ -605,12 +608,44 @@ export default function GestaoFinanceiraPage() {
                           {formatCurrency(group.totalPendente)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                          <Link
-                            href={`/dashboard/financeiro/membros/${encodeURIComponent(group.periodoInicio)}_${encodeURIComponent(group.periodoFim)}`}
-                            className="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300"
-                          >
-                            Ver Detalhes
-                          </Link>
+                          <div className="flex items-center justify-end gap-3">
+                            {/* Botão Adicionar Membros - só aparece se status for fatura_gerada */}
+                            {group.status === "fatura_gerada" && (
+                              <button
+                                onClick={() => {
+                                  setAddMembersPeriod({
+                                    inicio: group.periodoInicio,
+                                    fim: group.periodoFim,
+                                    memberIds: group.invoices.map((inv) => inv.userId),
+                                  });
+                                  setShowAddMembersModal(true);
+                                }}
+                                className="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300 font-medium flex items-center gap-1"
+                                title="Adicionar membros à fatura"
+                              >
+                                <svg
+                                  className="w-4 h-4"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"
+                                  />
+                                </svg>
+                                Adicionar Membros
+                              </button>
+                            )}
+                            <Link
+                              href={`/dashboard/financeiro/membros/${encodeURIComponent(group.periodoInicio)}_${encodeURIComponent(group.periodoFim)}`}
+                              className="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300 font-medium"
+                            >
+                              Ver Detalhes
+                            </Link>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -757,6 +792,19 @@ export default function GestaoFinanceiraPage() {
             )}
         </div>
       )}
+
+      {/* Modal Adicionar Membros */}
+      <AddMembersToInvoiceModal
+        isOpen={showAddMembersModal}
+        onClose={() => setShowAddMembersModal(false)}
+        periodoInicio={addMembersPeriod.inicio}
+        periodoFim={addMembersPeriod.fim}
+        existingMemberIds={addMembersPeriod.memberIds}
+        onMembersAdded={async () => {
+          await loadMemberInvoices();
+          setShowAddMembersModal(false);
+        }}
+      />
     </div>
   );
 }

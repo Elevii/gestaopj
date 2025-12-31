@@ -12,6 +12,7 @@ import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useFormatDate } from "@/hooks/useFormatDate";
 import Link from "next/link";
+import AddMembersToInvoiceModal from "@/components/financeiro/AddMembersToInvoiceModal";
 
 interface InvoiceWithUser extends MemberInvoice {
   user: User | null;
@@ -24,6 +25,7 @@ export default function MemberInvoicesDetailPage() {
   const { formatDate } = useFormatDate();
   const [invoices, setInvoices] = useState<InvoiceWithUser[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showAddMembersModal, setShowAddMembersModal] = useState(false);
   
   // Filtros
   const [searchName, setSearchName] = useState("");
@@ -243,6 +245,59 @@ export default function MemberInvoicesDetailPage() {
     }
   };
 
+  // Verificar se todas as faturas estão pagas
+  const allInvoicesPaid = useMemo(() => {
+    return invoices.every(
+      (inv) => inv.status === "pago" || inv.status === "pagamentos_realizados"
+    );
+  }, [invoices]);
+
+  // Reabrir período (mudar todas as faturas de "pago" para "pendente")
+  const handleReopenPeriod = async () => {
+    if (!allInvoicesPaid) {
+      alert("Só é possível reabrir um período quando todas as faturas estiverem pagas.");
+      return;
+    }
+
+    if (
+      !confirm(
+        "Tem certeza que deseja reabrir este período? Todas as faturas voltarão para o status 'Pendente'."
+      )
+    ) {
+      return;
+    }
+
+    try {
+      console.log("🔄 Reabrindo período...");
+
+      // Reabrir todas as faturas pagas
+      const paidInvoices = invoices.filter(
+        (inv) => inv.status === "pago" || inv.status === "pagamentos_realizados"
+      );
+
+      await Promise.all(
+        paidInvoices.map((inv) => memberInvoiceService.reopenInvoice(inv.id))
+      );
+
+      console.log("✅ Período reaberto com sucesso");
+      alert("Período reaberto! Todas as faturas voltaram para 'Pendente'.");
+      await reloadInvoices();
+    } catch (error) {
+      console.error("Erro ao reabrir período:", error);
+      alert("Erro ao reabrir período. Verifique o console.");
+    }
+  };
+
+  // Verificar se o período tem fatura gerada
+  const hasFaturaGerada = useMemo(() => {
+    return invoices.some((inv) => inv.status === "fatura_gerada");
+  }, [invoices]);
+
+  // IDs dos membros que já têm fatura neste período
+  const existingMemberIds = useMemo(() => {
+    return invoices.map((inv) => inv.userId);
+  }, [invoices]);
+
   if (loading) {
     return (
       <div className="p-6">
@@ -301,7 +356,54 @@ export default function MemberInvoicesDetailPage() {
             {format(parseISO(periodoFim), "dd/MM/yyyy", { locale: ptBR })}
           </p>
         </div>
-        <div>
+        <div className="flex gap-3">
+          {/* Botão Adicionar Membros - só aparece se houver fatura_gerada */}
+          {hasFaturaGerada && (
+            <button
+              onClick={() => setShowAddMembersModal(true)}
+              className="inline-flex items-center px-4 py-2 border border-indigo-600 dark:border-indigo-500 text-sm font-medium rounded-lg text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors"
+            >
+              <svg
+                className="w-5 h-5 mr-2"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"
+                />
+              </svg>
+              Adicionar Membros
+            </button>
+          )}
+
+          {/* Botão Reabrir Período - só aparece se todas estiverem pagas */}
+          {allInvoicesPaid && (
+            <button
+              onClick={handleReopenPeriod}
+              className="inline-flex items-center px-4 py-2 border border-yellow-600 dark:border-yellow-500 text-sm font-medium rounded-lg text-yellow-600 dark:text-yellow-400 hover:bg-yellow-50 dark:hover:bg-yellow-900/20 transition-colors"
+            >
+              <svg
+                className="w-5 h-5 mr-2"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                />
+              </svg>
+              Reabrir Período
+            </button>
+          )}
+
+          {/* Botão Pagar Todas Pendentes */}
           {invoices.filter(
             (inv) => inv.status !== "pago" && inv.status !== "pagamentos_realizados" && inv.status !== "cancelado"
           ).length > 0 && (
@@ -618,6 +720,16 @@ export default function MemberInvoicesDetailPage() {
           </table>
         </div>
       </div>
+
+      {/* Modal Adicionar Membros */}
+      <AddMembersToInvoiceModal
+        isOpen={showAddMembersModal}
+        onClose={() => setShowAddMembersModal(false)}
+        periodoInicio={periodoInicio}
+        periodoFim={periodoFim}
+        existingMemberIds={existingMemberIds}
+        onMembersAdded={reloadInvoices}
+      />
     </div>
   );
 }

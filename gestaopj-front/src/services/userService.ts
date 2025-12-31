@@ -81,11 +81,19 @@ class UserService {
     if (existingIndex >= 0) {
       // Atualizar usuário existente
       users[existingIndex] = user;
-      console.log('✅ Usuário atualizado no localStorage:', user.id, user.email);
+      console.log(
+        "✅ Usuário atualizado no localStorage:",
+        user.id,
+        user.email
+      );
     } else {
       // Adicionar novo usuário
       users.push(user);
-      console.log('✅ Usuário adicionado ao localStorage:', user.id, user.email);
+      console.log(
+        "✅ Usuário adicionado ao localStorage:",
+        user.id,
+        user.email
+      );
     }
 
     this.saveUsersToStorage(users);
@@ -166,7 +174,10 @@ class UserService {
 
   // Nota: Este método não é mais usado - verificação de senha agora é feita no backend
   // Mantido apenas para compatibilidade com código antigo que pode ainda usar localStorage
-  async verifyPassword(user: User & { passwordHash?: string }, password: string): Promise<boolean> {
+  async verifyPassword(
+    user: User & { passwordHash?: string },
+    password: string
+  ): Promise<boolean> {
     if (!user.passwordHash) {
       // Se não tem passwordHash, não pode verificar (usuário veio do backend)
       return false;
@@ -176,4 +187,3 @@ class UserService {
 }
 
 export const userService = new UserService();
-
