@@ -84,7 +84,10 @@ class AuthService {
     limits: PlanLimits | null;
   }> {
     // Chamar API de registro
-    const authResponse: AuthResponse = await api.post('/auth/register', registerDto);
+    const authResponse: AuthResponse = await api.post(
+      "/auth/register",
+      registerDto
+    );
 
     // Salvar token
     api.setAuthToken(authResponse.accessToken);
@@ -93,9 +96,12 @@ class AuthService {
     // Converter resposta para User
     const user = this.mapUserResponseToUser(authResponse.user);
 
+    // 🔄 IMPORTANTE: Sincronizar usuário no localStorage
+    await userService.saveOrUpdateUser(user);
+
     // Buscar empresas do usuário (ainda usando localStorage por enquanto)
     const memberships = await companyMembershipService.findByUserId(user.id);
-    
+
     // Buscar dados completos das empresas
     const companiesData: CompanyMembership[] = [];
     let defaultCompany: Company | null = null;
@@ -104,10 +110,14 @@ class AuthService {
 
     if (memberships.length > 0) {
       const defaultMembership = memberships[0];
-      defaultCompany = await companyService.findById(defaultMembership.companyId);
-      
+      defaultCompany = await companyService.findById(
+        defaultMembership.companyId
+      );
+
       if (defaultCompany && defaultCompany.active) {
-        subscription = await subscriptionService.findByCompanyId(defaultCompany.id);
+        subscription = await subscriptionService.findByCompanyId(
+          defaultCompany.id
+        );
         limits = subscription
           ? await subscriptionService.getCompanyLimits(defaultCompany.id)
           : null;
@@ -151,7 +161,10 @@ class AuthService {
     limits: PlanLimits | null;
   }> {
     // Chamar API de login
-    const authResponse: AuthResponse = await api.post('/auth/login', credentials);
+    const authResponse: AuthResponse = await api.post(
+      "/auth/login",
+      credentials
+    );
 
     // Salvar token
     api.setAuthToken(authResponse.accessToken);
@@ -160,9 +173,12 @@ class AuthService {
     // Converter resposta para User
     const user = this.mapUserResponseToUser(authResponse.user);
 
+    // 🔄 IMPORTANTE: Sincronizar usuário no localStorage
+    await userService.saveOrUpdateUser(user);
+
     // Buscar empresas do usuário (ainda usando localStorage por enquanto)
     const memberships = await companyMembershipService.findByUserId(user.id);
-    
+
     // Buscar dados completos das empresas
     const companiesData: CompanyMembership[] = [];
     let defaultCompany: Company | null = null;
@@ -172,10 +188,14 @@ class AuthService {
     if (memberships.length > 0) {
       // Selecionar primeira empresa como padrão (ou a última acessada)
       const defaultMembership = memberships[0];
-      defaultCompany = await companyService.findById(defaultMembership.companyId);
-      
+      defaultCompany = await companyService.findById(
+        defaultMembership.companyId
+      );
+
       if (defaultCompany && defaultCompany.active) {
-        subscription = await subscriptionService.findByCompanyId(defaultCompany.id);
+        subscription = await subscriptionService.findByCompanyId(
+          defaultCompany.id
+        );
         limits = subscription
           ? await subscriptionService.getCompanyLimits(defaultCompany.id)
           : null;
@@ -221,16 +241,19 @@ class AuthService {
 
     try {
       // Usar o endpoint /auth/me do backend para validar token e obter usuário
-      const user = await api.get<User>('/auth/me');
-      
+      const user = await api.get<User>("/auth/me");
+
+      // 🔄 Sincronizar usuário no localStorage
+      await userService.saveOrUpdateUser(user);
+
       // Cachear o usuário
-      if (typeof window !== 'undefined') {
+      if (typeof window !== "undefined") {
         localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(user));
       }
-      
+
       return user;
     } catch (error) {
-      console.error('Erro ao obter usuário atual:', error);
+      console.error("Erro ao obter usuário atual:", error);
       // Se falhar (token inválido, expirado, etc), fazer logout
       this.clearSession();
       return null;
@@ -271,7 +294,10 @@ class AuthService {
     const session = this.getSession();
     if (!session) {
       // Tentar recarregar sessão do localStorage uma vez antes de falhar
-      const stored = typeof window !== "undefined" ? localStorage.getItem(SESSION_KEY) : null;
+      const stored =
+        typeof window !== "undefined"
+          ? localStorage.getItem(SESSION_KEY)
+          : null;
       if (!stored) {
         throw new Error("Usuário não autenticado");
       }
@@ -338,7 +364,10 @@ class AuthService {
 
   isAuthenticated(): boolean {
     const session = this.getSession();
-    const token = typeof window !== "undefined" ? localStorage.getItem(ACCESS_TOKEN_KEY) : null;
+    const token =
+      typeof window !== "undefined"
+        ? localStorage.getItem(ACCESS_TOKEN_KEY)
+        : null;
     return session !== null && token !== null;
   }
 
@@ -346,7 +375,9 @@ class AuthService {
     const session = this.getSession();
     if (!session) return false;
 
-    const memberships = await companyMembershipService.findByUserId(session.userId);
+    const memberships = await companyMembershipService.findByUserId(
+      session.userId
+    );
     return memberships.length === 0;
   }
 

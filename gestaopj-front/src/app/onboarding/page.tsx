@@ -106,15 +106,24 @@ export default function OnboardingPage() {
     if (!user || !invite.company) return;
 
     try {
-      // Aceitar convite
-      await inviteService.accept(invite.token);
-
-      // Criar membership
-      await companyMembershipService.create({
+      console.log("📨 Aceitando convite:", {
+        inviteId: invite.id,
         userId: user.id,
         companyId: invite.companyId,
         role: invite.role,
       });
+
+      // Aceitar convite
+      await inviteService.accept(invite.token);
+      console.log("✅ Convite aceito");
+
+      // Criar membership
+      const membership = await companyMembershipService.create({
+        userId: user.id,
+        companyId: invite.companyId,
+        role: invite.role,
+      });
+      console.log("✅ Membership criado:", membership);
 
       // Selecionar empresa aceita e atualizar autenticação
       await authService.switchCompany(invite.companyId);
@@ -126,6 +135,7 @@ export default function OnboardingPage() {
       // Redirecionar para dashboard
       router.push("/dashboard");
     } catch (error: any) {
+      console.error("❌ Erro ao aceitar convite:", error);
       alert(error.message || "Erro ao aceitar convite");
     }
   };

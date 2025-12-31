@@ -73,6 +73,25 @@ class UserService {
     return users.find((u) => u.email === email) || null;
   }
 
+  // Método para salvar ou atualizar usuário (sincronização com API)
+  async saveOrUpdateUser(user: User): Promise<User> {
+    const users = this.getUsersFromStorage();
+    const existingIndex = users.findIndex((u) => u.id === user.id);
+
+    if (existingIndex >= 0) {
+      // Atualizar usuário existente
+      users[existingIndex] = user;
+      console.log('✅ Usuário atualizado no localStorage:', user.id, user.email);
+    } else {
+      // Adicionar novo usuário
+      users.push(user);
+      console.log('✅ Usuário adicionado ao localStorage:', user.id, user.email);
+    }
+
+    this.saveUsersToStorage(users);
+    return user;
+  }
+
   async create(data: CreateUserDTO): Promise<User> {
     await new Promise((resolve) => setTimeout(resolve, 400));
 

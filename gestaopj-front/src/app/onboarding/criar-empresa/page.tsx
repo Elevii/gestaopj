@@ -98,6 +98,8 @@ export default function CriarEmpresaPage() {
 
     setIsLoading(true);
     try {
+      console.log("🏢 Criando empresa para usuário:", user.id, user.email);
+
       // 1. Criar empresa
       const empresa = await companyService.create({
         name: formData.nomeEmpresa,
@@ -106,13 +108,15 @@ export default function CriarEmpresaPage() {
         phone: formData.phone || undefined,
         address: formData.address || undefined,
       });
+      console.log("✅ Empresa criada:", empresa.id, empresa.name);
 
       // 2. Criar membership com role OWNER
-      await companyMembershipService.create({
+      const membership = await companyMembershipService.create({
         userId: user.id,
         companyId: empresa.id,
         role: "owner",
       });
+      console.log("✅ Membership de owner criado:", membership);
 
       // 3. Criar assinatura padrão (plano gratuito)
       const planFree = await subscriptionService.getPlanBySlug("free");
@@ -122,6 +126,7 @@ export default function CriarEmpresaPage() {
           planId: planFree.id,
           status: "active",
         });
+        console.log("✅ Assinatura free criada");
       }
 
       // 4. Selecionar empresa criada e atualizar autenticação

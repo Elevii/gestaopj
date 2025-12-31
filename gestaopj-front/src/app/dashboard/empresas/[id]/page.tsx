@@ -34,13 +34,20 @@ export default function EmpresaDetalhesPage() {
   const { user: currentUser, refreshAuth, userCompanies } = useAuth();
   const { company: currentCompany, updateCompany } = useCompany();
   const { configuracoes, updateConfiguracoes } = useConfiguracoes();
-  const { canManageUsers, canChangeUserRoles, canRemoveUsers, canInviteUsers, canViewCompanyDetails } =
-    usePermissions();
+  const {
+    canManageUsers,
+    canChangeUserRoles,
+    canRemoveUsers,
+    canInviteUsers,
+    canViewCompanyDetails,
+  } = usePermissions();
 
   // Membros podem acessar, mas apenas visualizar (sem opções de edição)
   const isOwnerOrAdmin = useMemo(() => {
     if (!currentCompany) return false;
-    const membership = userCompanies.find((m) => m.companyId === currentCompany.id);
+    const membership = userCompanies.find(
+      (m) => m.companyId === currentCompany.id
+    );
     return membership?.role === "owner" || membership?.role === "admin";
   }, [currentCompany, userCompanies]);
 
@@ -112,9 +119,9 @@ export default function EmpresaDetalhesPage() {
     if (!companyId) return;
 
     // Carregar membros
-    const memberships = await companyMembershipService.findByCompanyId(
-      companyId
-    );
+    const memberships =
+      await companyMembershipService.findByCompanyId(companyId);
+    console.log("📋 Memberships encontrados:", memberships);
     const membersData: MemberWithUser[] = [];
 
     // Obter mês atual para calcular horas
@@ -122,57 +129,65 @@ export default function EmpresaDetalhesPage() {
     const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
       .toISOString()
       .split("T")[0];
-    const lastDayOfMonth = new Date(
-      now.getFullYear(),
-      now.getMonth() + 1,
-      0
-    )
+    const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0)
       .toISOString()
       .split("T")[0];
 
     // Carregar todas as atuações do mês atual
     const allAtuacoes = await atuacaoService.findAll();
-    
+
     // Filtrar atuações do mês atual e que pertencem a projetos desta empresa
     const projetos = await projetoService.findAll(companyId);
-    const projetosIds = new Set(projetos.map(p => p.id));
-    
+    const projetosIds = new Set(projetos.map((p) => p.id));
+
     const atuacoesMesAtual = allAtuacoes.filter(
-      (a) => 
-        a.data >= firstDayOfMonth && 
+      (a) =>
+        a.data >= firstDayOfMonth &&
         a.data <= lastDayOfMonth &&
         projetosIds.has(a.projetoId)
     );
 
     for (const membership of memberships) {
       const user = await userService.findById(membership.userId);
-      if (user) {
-        const settings = await userCompanySettingsService.findByUserAndCompany(
-          membership.userId,
-          companyId
-        );
 
-        // Calcular horas do mês atual para este membro
-        const horasMesAtual = atuacoesMesAtual
-          .filter((a) => {
-            // Se a atuação tem userId, usar ele para filtrar
-            if (a.userId) {
-              return a.userId === membership.userId;
-            }
-            // Se não tem userId, assumir que é do usuário atual logado (para compatibilidade com dados antigos)
-            // Isso só funciona se o membro for o usuário atual
-            return currentUser?.id === membership.userId;
-          })
-          .reduce((total, a) => total + (a.horasUtilizadas || 0), 0);
-
-        membersData.push({
-          ...membership,
-          user,
-          settings: settings ?? undefined,
-          horasMesAtual,
+      if (!user) {
+        console.warn(`⚠️ Usuário não encontrado para membership:`, {
+          membershipId: membership.id,
+          userId: membership.userId,
+          role: membership.role,
+          companyId: membership.companyId,
         });
+        // Pular este membro se o usuário não existir
+        continue;
       }
+
+      const settings = await userCompanySettingsService.findByUserAndCompany(
+        membership.userId,
+        companyId
+      );
+
+      // Calcular horas do mês atual para este membro
+      const horasMesAtual = atuacoesMesAtual
+        .filter((a) => {
+          // Se a atuação tem userId, usar ele para filtrar
+          if (a.userId) {
+            return a.userId === membership.userId;
+          }
+          // Se não tem userId, assumir que é do usuário atual logado (para compatibilidade com dados antigos)
+          // Isso só funciona se o membro for o usuário atual
+          return currentUser?.id === membership.userId;
+        })
+        .reduce((total, a) => total + (a.horasUtilizadas || 0), 0);
+
+      membersData.push({
+        ...membership,
+        user,
+        settings: settings ?? undefined,
+        horasMesAtual,
+      });
     }
+
+    console.log("👥 Membros carregados:", membersData);
     setMembers(membersData);
   };
 
@@ -256,12 +271,14 @@ export default function EmpresaDetalhesPage() {
         return parseFloat(value.replace(/\./g, "").replace(",", "."));
       };
 
-      const valorHora = memberForm.horista && memberForm.valorHora 
-        ? parseCurrency(memberForm.valorHora) 
-        : undefined;
-      const valorFixo = !memberForm.horista && memberForm.valorFixo 
-        ? parseCurrency(memberForm.valorFixo) 
-        : undefined;
+      const valorHora =
+        memberForm.horista && memberForm.valorHora
+          ? parseCurrency(memberForm.valorHora)
+          : undefined;
+      const valorFixo =
+        !memberForm.horista && memberForm.valorFixo
+          ? parseCurrency(memberForm.valorFixo)
+          : undefined;
 
       if (selectedMember.settings) {
         // Atualizar configuração existente
@@ -351,17 +368,17 @@ export default function EmpresaDetalhesPage() {
 
   const getRoleBadgeColor = (role: string) => {
     const colors: Record<string, string> = {
-      owner: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200",
+      owner:
+        "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200",
       admin: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
-      member: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
+      member:
+        "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
       viewer: "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200",
     };
     return colors[role] || colors.viewer;
   };
 
-  const currentMembership = members.find(
-    (m) => m.userId === currentUser?.id
-  );
+  const currentMembership = members.find((m) => m.userId === currentUser?.id);
 
   // Carregar dados da empresa no formulário
   useEffect(() => {
@@ -390,8 +407,12 @@ export default function EmpresaDetalhesPage() {
     if (!company) return;
 
     // Validação
-    const diaInicio = companyForm.diaInicioFaturamento ? parseInt(companyForm.diaInicioFaturamento) : undefined;
-    const diaFim = companyForm.diaFimFaturamento ? parseInt(companyForm.diaFimFaturamento) : undefined;
+    const diaInicio = companyForm.diaInicioFaturamento
+      ? parseInt(companyForm.diaInicioFaturamento)
+      : undefined;
+    const diaFim = companyForm.diaFimFaturamento
+      ? parseInt(companyForm.diaFimFaturamento)
+      : undefined;
 
     if (diaInicio && (diaInicio < 1 || diaInicio > 31)) {
       alert("Dia de início deve ser entre 1 e 31");
@@ -422,18 +443,18 @@ export default function EmpresaDetalhesPage() {
         diaInicioFaturamento: diaInicio,
         diaFimFaturamento: diaFim,
       });
-      
+
       // Atualizar horas úteis padrão nas configurações
       await updateConfiguracoes({
         horasUteisPadrao: horasUteis,
       });
-      
+
       // Recarregar dados da empresa
       const updatedCompany = await companyService.findById(company.id);
       if (updatedCompany) {
         setCompany(updatedCompany);
       }
-      
+
       setShowEditCompanyModal(false);
       alert("Configurações atualizadas com sucesso!");
     } catch (error: any) {
@@ -629,158 +650,160 @@ export default function EmpresaDetalhesPage() {
 
       {/* Lista de membros - apenas para quem tem permissão */}
       {canViewCompanyDetails && (
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-            <thead className="bg-gray-50 dark:bg-gray-900">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Nome
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Role
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Horas Utilizadas (Mês)
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Limite Mensal de Horas
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Ações
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-              {members.map((member) => {
-                const isCurrentUser = member.userId === currentUser?.id;
-                const isOwner = member.role === "owner";
-                const canEdit =
-                  canManageUsers &&
-                  !isCurrentUser &&
-                  !isOwner &&
-                  currentMembership?.role !== "viewer";
-                const canRemove =
-                  canRemoveUsers &&
-                  !isCurrentUser &&
-                  !isOwner &&
-                  currentMembership?.role !== "viewer";
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+              <thead className="bg-gray-50 dark:bg-gray-900">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    Nome
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    Role
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    Horas Utilizadas (Mês)
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    Limite Mensal de Horas
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    Ações
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                {members.map((member) => {
+                  const isCurrentUser = member.userId === currentUser?.id;
+                  const isOwner = member.role === "owner";
+                  const canEdit =
+                    canManageUsers &&
+                    !isCurrentUser &&
+                    !isOwner &&
+                    currentMembership?.role !== "viewer";
+                  const canRemove =
+                    canRemoveUsers &&
+                    !isCurrentUser &&
+                    !isOwner &&
+                    currentMembership?.role !== "viewer";
 
-                const limiteMensalHoras = member.settings?.horista
-                  ? member.settings?.limiteMensalHoras?.toFixed(2) || "-"
-                  : "-";
+                  const limiteMensalHoras = member.settings?.horista
+                    ? member.settings?.limiteMensalHoras?.toFixed(2) || "-"
+                    : "-";
 
-                return (
-                  <tr
-                    key={member.id}
-                    className="hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer"
-                    onClick={() => {
-                      if (canManageUsers) {
-                        openEditMemberModal(member);
-                      }
-                    }}
-                  >
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center">
-                        <div className="h-10 w-10 rounded-full bg-indigo-600 flex items-center justify-center text-white font-medium">
-                          {member.user.name
-                            .split(" ")
-                            .map((n) => n[0])
-                            .join("")
-                            .toUpperCase()
-                            .substring(0, 2)}
-                        </div>
-                        <div className="ml-4">
-                          <div className="text-sm font-medium text-gray-900 dark:text-white">
-                            {member.user.name}
-                            {isCurrentUser && (
-                              <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">
-                                (Você)
-                              </span>
-                            )}
+                  return (
+                    <tr
+                      key={member.id}
+                      className="hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer"
+                      onClick={() => {
+                        if (canManageUsers) {
+                          openEditMemberModal(member);
+                        }
+                      }}
+                    >
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <div className="h-10 w-10 rounded-full bg-indigo-600 flex items-center justify-center text-white font-medium">
+                            {member.user.name
+                              .split(" ")
+                              .map((n) => n[0])
+                              .join("")
+                              .toUpperCase()
+                              .substring(0, 2)}
+                          </div>
+                          <div className="ml-4">
+                            <div className="text-sm font-medium text-gray-900 dark:text-white">
+                              {member.user.name}
+                              {isCurrentUser && (
+                                <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">
+                                  (Você)
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span
-                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getRoleBadgeColor(
-                          member.role
-                        )}`}
-                      >
-                        {getRoleLabel(member.role)}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900 dark:text-white">
-                        {member.horasMesAtual?.toFixed(2) || "0.00"}h
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900 dark:text-white">
-                        {limiteMensalHoras}
-                        {limiteMensalHoras !== "-" && "h"}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <div
-                        className="flex items-center gap-2"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        {canEdit && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              const newRole =
-                                member.role === "viewer"
-                                  ? "member"
-                                  : member.role === "member"
-                                  ? "admin"
-                                  : "viewer";
-                              handleChangeRole(member.id, newRole);
-                            }}
-                            className="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300"
-                            title="Alterar Role"
-                          >
-                            Alterar Role
-                          </button>
-                        )}
-                        {canRemove && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleRemoveMember(member.id);
-                            }}
-                            className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
-                            title="Remover"
-                          >
-                            Remover
-                          </button>
-                        )}
-                        {canManageUsers && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              openEditMemberModal(member);
-                            }}
-                            className="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300"
-                            title="Ver Detalhes"
-                          >
-                            Detalhes
-                          </button>
-                        )}
-                        {!canEdit && !canRemove && !canManageUsers && (
-                          <span className="text-gray-400 dark:text-gray-600">-</span>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span
+                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getRoleBadgeColor(
+                            member.role
+                          )}`}
+                        >
+                          {getRoleLabel(member.role)}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-900 dark:text-white">
+                          {member.horasMesAtual?.toFixed(2) || "0.00"}h
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-900 dark:text-white">
+                          {limiteMensalHoras}
+                          {limiteMensalHoras !== "-" && "h"}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                        <div
+                          className="flex items-center gap-2"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {canEdit && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const newRole =
+                                  member.role === "viewer"
+                                    ? "member"
+                                    : member.role === "member"
+                                      ? "admin"
+                                      : "viewer";
+                                handleChangeRole(member.id, newRole);
+                              }}
+                              className="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300"
+                              title="Alterar Role"
+                            >
+                              Alterar Role
+                            </button>
+                          )}
+                          {canRemove && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleRemoveMember(member.id);
+                              }}
+                              className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
+                              title="Remover"
+                            >
+                              Remover
+                            </button>
+                          )}
+                          {canManageUsers && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openEditMemberModal(member);
+                              }}
+                              className="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300"
+                              title="Ver Detalhes"
+                            >
+                              Detalhes
+                            </button>
+                          )}
+                          {!canEdit && !canRemove && !canManageUsers && (
+                            <span className="text-gray-400 dark:text-gray-600">
+                              -
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
       )}
 
       {/* Modal de Convite */}
@@ -941,10 +964,16 @@ export default function EmpresaDetalhesPage() {
                           setMemberForm({
                             ...memberForm,
                             horista: e.target.checked,
-                            limiteMensalHoras: e.target.checked ? memberForm.limiteMensalHoras : "",
+                            limiteMensalHoras: e.target.checked
+                              ? memberForm.limiteMensalHoras
+                              : "",
                             // Limpar campos quando mudar o tipo
-                            valorHora: e.target.checked ? memberForm.valorHora : "",
-                            valorFixo: !e.target.checked ? memberForm.valorFixo : "",
+                            valorHora: e.target.checked
+                              ? memberForm.valorHora
+                              : "",
+                            valorFixo: !e.target.checked
+                              ? memberForm.valorFixo
+                              : "",
                           });
                         }}
                         className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
@@ -962,7 +991,8 @@ export default function EmpresaDetalhesPage() {
                     <>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                          Limite Mensal de Horas <span className="text-red-500">*</span>
+                          Limite Mensal de Horas{" "}
+                          <span className="text-red-500">*</span>
                         </label>
                         <input
                           type="number"
@@ -988,7 +1018,9 @@ export default function EmpresaDetalhesPage() {
                           type="text"
                           value={memberForm.valorHora}
                           onChange={(e) => {
-                            const formatted = formatCurrencyInput(e.target.value);
+                            const formatted = formatCurrencyInput(
+                              e.target.value
+                            );
                             setMemberForm({
                               ...memberForm,
                               valorHora: formatted,
@@ -998,7 +1030,8 @@ export default function EmpresaDetalhesPage() {
                           placeholder="0,00"
                         />
                         <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                          Valor que será usado para calcular o pagamento baseado nas horas trabalhadas
+                          Valor que será usado para calcular o pagamento baseado
+                          nas horas trabalhadas
                         </p>
                       </div>
                     </>
@@ -1036,7 +1069,10 @@ export default function EmpresaDetalhesPage() {
                       type="text"
                       value={memberForm.contato}
                       onChange={(e) =>
-                        setMemberForm({ ...memberForm, contato: e.target.value })
+                        setMemberForm({
+                          ...memberForm,
+                          contato: e.target.value,
+                        })
                       }
                       className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors dark:bg-gray-700 dark:text-white"
                       placeholder="Telefone ou outro contato"
@@ -1120,7 +1156,8 @@ export default function EmpresaDetalhesPage() {
                     placeholder="Ex: 26"
                   />
                   <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                    Dia do mês em que o período de faturamento começa (ex: 26 = do dia 26 até o dia 25 do mês seguinte)
+                    Dia do mês em que o período de faturamento começa (ex: 26 =
+                    do dia 26 até o dia 25 do mês seguinte)
                   </p>
                 </div>
                 <div>
@@ -1162,7 +1199,8 @@ export default function EmpresaDetalhesPage() {
                     placeholder="Ex: 8 ou 8,5"
                   />
                   <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                    Valor padrão usado ao criar novos projetos (1-24 horas, decimal permitido)
+                    Valor padrão usado ao criar novos projetos (1-24 horas,
+                    decimal permitido)
                   </p>
                 </div>
               </div>
