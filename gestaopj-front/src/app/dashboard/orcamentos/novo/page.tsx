@@ -62,6 +62,7 @@ export default function NovoOrcamentoPage() {
     atividadeIds: [] as string[],
     usarEntregaveis: true,
     mostrarSubtotaisPorEntregavel: true,
+    mostrarDatasCronograma: true, // Por padrão, mostra as datas
     introText: "",
   });
 
@@ -215,6 +216,7 @@ export default function NovoOrcamentoPage() {
         mostrarSubtotaisPorEntregavel: form.usarEntregaveis
           ? form.mostrarSubtotaisPorEntregavel
           : false,
+        mostrarDatasCronograma: form.mostrarDatasCronograma,
         entregaveis: form.usarEntregaveis ? entregaveis : undefined,
         observacoes: form.introText,
       };
@@ -600,6 +602,20 @@ export default function NovoOrcamentoPage() {
                     }
                   />
                   Mostrar subtotais por etapa no PDF
+                </label>
+
+                <label className="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                  <input
+                    type="checkbox"
+                    checked={form.mostrarDatasCronograma}
+                    onChange={(e) =>
+                      setForm((p) => ({
+                        ...p,
+                        mostrarDatasCronograma: e.target.checked,
+                      }))
+                    }
+                  />
+                  Exibir colunas de data de início e término no PDF
                 </label>
 
                 <div className="flex items-center justify-between">

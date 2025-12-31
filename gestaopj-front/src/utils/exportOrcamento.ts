@@ -292,11 +292,12 @@ export async function exportOrcamentoToPdf(params: {
           (c) => c !== "dataInicio"
         );
 
+        // Adiciona colunas de cronograma apenas se o usuário optou por exibir
         const head = [
           ...cols.map(fieldLabel),
-          // Adiciona colunas de cronograma se não estiverem selecionadas explicitamente
-          "Início",
-          "Fim",
+          ...(params.orcamento.mostrarDatasCronograma !== false
+            ? ["Início", "Fim"]
+            : []),
         ];
 
         const body = atividadesDoEntregavel.map(({ ativ, crono }) => {
@@ -306,8 +307,12 @@ export async function exportOrcamentoToPdf(params: {
           );
           return [
             ...rowData,
-            crono ? formatDateBr(crono.inicio) : "-",
-            crono ? formatDateBr(crono.fim) : "-",
+            ...(params.orcamento.mostrarDatasCronograma !== false
+              ? [
+                  crono ? formatDateBr(crono.inicio) : "-",
+                  crono ? formatDateBr(crono.fim) : "-",
+                ]
+              : []),
           ];
         });
 

@@ -184,6 +184,7 @@ export interface Orcamento {
   observacoes?: string;
   usarEntregaveis: boolean;
   mostrarSubtotaisPorEntregavel: boolean;
+  mostrarDatasCronograma?: boolean; // Se true, exibe colunas de início e término do cronograma
   entregaveis?: OrcamentoEntregavel[];
   createdAt: string;
   updatedAt: string;
@@ -198,6 +199,7 @@ export interface CreateOrcamentoDTO {
   observacoes?: string;
   usarEntregaveis: boolean;
   mostrarSubtotaisPorEntregavel: boolean;
+  mostrarDatasCronograma?: boolean; // Se true, exibe colunas de início e término do cronograma
   entregaveis?: OrcamentoEntregavel[];
 }
 
