@@ -29,6 +29,7 @@ export default function AddMembersToInvoiceModal({
   const { company } = useCompany();
   const [availableMembers, setAvailableMembers] = useState<User[]>([]);
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
+  const [memberValues, setMemberValues] = useState<{ [userId: string]: string }>({}); // Valores por membro
   const [loading, setLoading] = useState(false);
   const [adding, setAdding] = useState(false);
 
@@ -72,11 +73,20 @@ export default function AddMembersToInvoiceModal({
   }, [isOpen, company, existingMemberIds]);
 
   const handleToggleMember = (userId: string) => {
-    setSelectedMembers((prev) =>
-      prev.includes(userId)
-        ? prev.filter((id) => id !== userId)
-        : [...prev, userId]
-    );
+    setSelectedMembers((prev) => {
+      const isSelected = prev.includes(userId);
+      if (isSelected) {
+        // Remover
+        const newValues = { ...memberValues };
+        delete newValues[userId];
+        setMemberValues(newValues);
+        return prev.filter((id) => id !== userId);
+      } else {
+        // Adicionar com valor padrão vazio
+        setMemberValues({ ...memberValues, [userId]: "" });
+        return [...prev, userId];
+      }
+    });
   };
 
   const handleToggleAll = () => {
@@ -128,6 +138,7 @@ export default function AddMembersToInvoiceModal({
 
   const handleClose = () => {
     setSelectedMembers([]);
+    setMemberValues({});
     onClose();
   };
 

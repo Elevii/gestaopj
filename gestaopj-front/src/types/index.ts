@@ -203,7 +203,7 @@ export interface CreateOrcamentoDTO {
   entregaveis?: OrcamentoEntregavel[];
 }
 
-export type StatusFatura = "pendente" | "pago" | "atrasado" | "cancelado" | "fatura_gerada" | "pagamentos_realizados";
+export type StatusFatura = "pendente" | "pago" | "cancelado" | "fatura_gerada";
 
 // Tipos para Etapas de Faturamento
 export type TipoEtapa = "envio_relatorio" | "geracao_nota_fiscal" | "outro";

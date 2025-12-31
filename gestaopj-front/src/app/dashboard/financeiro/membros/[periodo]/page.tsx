@@ -101,20 +101,8 @@ export default function MemberInvoicesDetailPage() {
 
       // Filtro por status
       if (filterStatus !== "all") {
-        if (filterStatus === "pago") {
-          // Incluir tanto "pago" quanto "pagamentos_realizados"
-          if (invoice.status !== "pago" && invoice.status !== "pagamentos_realizados") {
-            return false;
-          }
-        } else if (filterStatus === "pagamentos_realizados") {
-          // Incluir apenas "pagamentos_realizados"
-          if (invoice.status !== "pagamentos_realizados") {
-            return false;
-          }
-        } else {
-          if (invoice.status !== filterStatus) {
-            return false;
-          }
+        if (invoice.status !== filterStatus) {
+          return false;
         }
       }
 
@@ -126,9 +114,9 @@ export default function MemberInvoicesDetailPage() {
     return invoices.reduce(
       (acc, inv) => {
         acc.total += inv.valor;
-        if (inv.status === "pago" || inv.status === "pagamentos_realizados") {
+        if (inv.status === "pago") {
           acc.pago += inv.valor;
-        } else if (inv.status === "pendente" || inv.status === "fatura_gerada" || inv.status === "atrasado") {
+        } else if (inv.status === "pendente" || inv.status === "fatura_gerada") {
           acc.pendente += inv.valor;
         }
         return acc;
@@ -177,7 +165,7 @@ export default function MemberInvoicesDetailPage() {
   // Pagamento em massa
   const handleBulkPayment = async () => {
     const pendingInvoices = invoices.filter(
-      (inv) => inv.status !== "pago" && inv.status !== "pagamentos_realizados" && inv.status !== "cancelado"
+      (inv) => inv.status !== "pago" && inv.status !== "cancelado"
     );
 
     if (pendingInvoices.length === 0) {
@@ -198,7 +186,7 @@ export default function MemberInvoicesDetailPage() {
       await Promise.all(
         pendingInvoices.map((inv) =>
           memberInvoiceService.update(inv.id, {
-            status: "pagamentos_realizados",
+            status: "pago",
             dataPagamento: now,
           })
         )
@@ -218,7 +206,7 @@ export default function MemberInvoicesDetailPage() {
 
     try {
       await memberInvoiceService.update(invoiceId, {
-        status: "pagamentos_realizados",
+        status: "pago",
         dataPagamento: new Date().toISOString(),
       });
       await reloadInvoices();
@@ -248,7 +236,7 @@ export default function MemberInvoicesDetailPage() {
   // Verificar se todas as faturas estão pagas
   const allInvoicesPaid = useMemo(() => {
     return invoices.every(
-      (inv) => inv.status === "pago" || inv.status === "pagamentos_realizados"
+      (inv) => inv.status === "pago"
     );
   }, [invoices]);
 
@@ -272,7 +260,7 @@ export default function MemberInvoicesDetailPage() {
 
       // Reabrir todas as faturas pagas
       const paidInvoices = invoices.filter(
-        (inv) => inv.status === "pago" || inv.status === "pagamentos_realizados"
+        (inv) => inv.status === "pago"
       );
 
       await Promise.all(
@@ -405,7 +393,7 @@ export default function MemberInvoicesDetailPage() {
 
           {/* Botão Pagar Todas Pendentes */}
           {invoices.filter(
-            (inv) => inv.status !== "pago" && inv.status !== "pagamentos_realizados" && inv.status !== "cancelado"
+            (inv) => inv.status !== "pago" && inv.status !== "cancelado"
           ).length > 0 && (
             <button
               onClick={handleBulkPayment}
@@ -491,11 +479,9 @@ export default function MemberInvoicesDetailPage() {
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm"
               >
                 <option value="all">Todos</option>
-                <option value="fatura_gerada">Fatura Gerada</option>
-                <option value="pagamentos_realizados">Pagamentos Realizados</option>
-                <option value="pago">Pago</option>
                 <option value="pendente">Pendente</option>
-                <option value="atrasado">Atrasado</option>
+                <option value="fatura_gerada">Fatura Gerada</option>
+                <option value="pago">Pago</option>
                 <option value="cancelado">Cancelado</option>
               </select>
             </div>
@@ -578,7 +564,7 @@ export default function MemberInvoicesDetailPage() {
             <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
               {filteredInvoices.map((invoice) => {
                 const isLate =
-                  invoice.status !== "pago" && invoice.status !== "pagamentos_realizados" &&
+                  invoice.status !== "pago" && invoice.status !== "cancelado" &&
                   parseISO(invoice.dataVencimento) < new Date();
 
                 return (
@@ -643,12 +629,12 @@ export default function MemberInvoicesDetailPage() {
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span
                         className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                          invoice.status === "pago" || invoice.status === "pagamentos_realizados"
+                          invoice.status === "pago"
                             ? "bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300"
                             : "bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300"
                         }`}
                       >
-                        {invoice.status === "pago" || invoice.status === "pagamentos_realizados"
+                        {invoice.status === "pago"
                           ? "Sim"
                           : "Não"}
                       </span>
@@ -662,22 +648,22 @@ export default function MemberInvoicesDetailPage() {
                       <div className="flex flex-col gap-1">
                         <span
                           className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                            invoice.status === "pago" || invoice.status === "pagamentos_realizados"
+                            invoice.status === "pago"
                               ? "bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300"
                               : invoice.status === "cancelado"
                               ? "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300"
-                              : isLate || invoice.status === "atrasado"
+                              : isLate
                               ? "bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300"
                               : invoice.status === "fatura_gerada"
                               ? "bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300"
                               : "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-300"
                           }`}
                         >
-                          {invoice.status === "pago" || invoice.status === "pagamentos_realizados"
-                            ? "Pagamentos Realizados"
+                          {invoice.status === "pago"
+                            ? "Pago"
                             : invoice.status === "cancelado"
                             ? "Cancelado"
-                            : isLate || invoice.status === "atrasado"
+                            : isLate
                             ? "Atrasado"
                             : invoice.status === "fatura_gerada"
                             ? "Fatura Gerada"
@@ -687,7 +673,7 @@ export default function MemberInvoicesDetailPage() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <div className="flex items-center justify-end gap-2">
-                        {invoice.status !== "pago" && invoice.status !== "pagamentos_realizados" && invoice.status !== "cancelado" && (
+                        {invoice.status !== "pago" && invoice.status !== "cancelado" && (
                           <>
                             <button
                               onClick={() => handlePayment(invoice.id)}
@@ -705,8 +691,8 @@ export default function MemberInvoicesDetailPage() {
                             </button>
                           </>
                         )}
-                        {(invoice.status === "pago" || invoice.status === "pagamentos_realizados") && (
-                          <span className="text-gray-400 text-xs">Pagamentos Realizados</span>
+                        {invoice.status === "pago" && (
+                          <span className="text-gray-400 text-xs">Pago</span>
                         )}
                         {invoice.status === "cancelado" && (
                           <span className="text-gray-400 text-xs">Cancelado</span>
