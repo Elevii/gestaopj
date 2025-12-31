@@ -21,7 +21,9 @@ export default function OnboardingPage() {
   const [invites, setInvites] = useState<InviteWithCompany[]>([]);
   const [loadingInvites, setLoadingInvites] = useState(true);
 
+  // Verificar autenticação apenas após carregar
   useEffect(() => {
+    // Só redireciona para login se tiver certeza que não está autenticado
     if (!loading && !isAuthenticated) {
       router.push("/login");
     }
@@ -45,8 +47,8 @@ export default function OnboardingPage() {
             console.error("Erro ao selecionar empresa:", error);
           }
         }
-        // Redirecionar para dashboard
-        window.location.href = "/dashboard";
+        // Redirecionar para dashboard usando router
+        router.push("/dashboard");
       }
     };
 
@@ -105,8 +107,8 @@ export default function OnboardingPage() {
       // Aguardar um pouco para garantir que o estado seja atualizado
       await new Promise(resolve => setTimeout(resolve, 100));
       
-      // Usar window.location para forçar reload completo e garantir que o estado seja atualizado
-      window.location.href = "/dashboard";
+      // Redirecionar para dashboard
+      router.push("/dashboard");
     } catch (error: any) {
       alert(error.message || "Erro ao aceitar convite");
     }

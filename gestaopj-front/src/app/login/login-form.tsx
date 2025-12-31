@@ -89,19 +89,17 @@ export default function LoginForm() {
       // Se não tem empresas, redirecionar para onboarding
       if (loginResult.companies.length === 0) {
         console.log('🔄 Redirecionando para onboarding (sem empresas)');
-        // Aguardar mais um pouco para garantir que o contexto seja atualizado na próxima página
-        setTimeout(() => {
-          window.location.href = "/onboarding";
-        }, 100);
+        // Aguardar para garantir que o contexto seja atualizado
+        await new Promise(resolve => setTimeout(resolve, 200));
+        router.push("/onboarding");
         return;
       }
 
       // Se já tem empresa selecionada, redirecionar para dashboard
       if (loginResult.company) {
         console.log('🔄 Redirecionando para dashboard (empresa selecionada:', loginResult.company.id, ')');
-        setTimeout(() => {
-          window.location.href = "/dashboard";
-        }, 100);
+        await new Promise(resolve => setTimeout(resolve, 200));
+        router.push("/dashboard");
         return;
       }
 
@@ -147,8 +145,8 @@ export default function LoginForm() {
     try {
       await authService.switchCompany(companyId);
       console.log('🔄 Redirecionando para dashboard após selecionar empresa');
-      // Usar window.location para garantir redirecionamento
-      window.location.href = "/dashboard";
+      await new Promise(resolve => setTimeout(resolve, 200));
+      router.push("/dashboard");
     } catch (error) {
       console.error("Erro ao selecionar empresa:", error);
       setSelectingCompany(false);

@@ -114,8 +114,8 @@ export default function EmpresasPage() {
       // Aguardar um pouco para garantir que o estado seja atualizado
       await new Promise(resolve => setTimeout(resolve, 100));
       
-      // Usar window.location para forçar reload completo e garantir que o estado seja atualizado
-      window.location.href = "/dashboard";
+      // Recarregar página para atualizar estado
+      window.location.reload();
     } catch (error: any) {
       alert(error.message || "Erro ao aceitar convite");
     }

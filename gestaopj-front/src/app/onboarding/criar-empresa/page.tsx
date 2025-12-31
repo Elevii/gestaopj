@@ -43,7 +43,7 @@ export default function CriarEmpresaPage() {
           }
         }
         // Redirecionar para dashboard
-        window.location.href = "/dashboard";
+        router.push("/dashboard");
       }
     };
 
@@ -115,8 +115,8 @@ export default function CriarEmpresaPage() {
       // Aguardar um pouco para garantir que o estado seja atualizado
       await new Promise(resolve => setTimeout(resolve, 100));
       
-      // Usar window.location para forçar reload completo e garantir que o estado seja atualizado
-      window.location.href = "/dashboard";
+      // Redirecionar para dashboard
+      router.push("/dashboard");
     } catch (error: any) {
       console.error("Erro ao criar empresa:", error);
       setErrors({
