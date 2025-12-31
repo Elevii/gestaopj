@@ -252,7 +252,6 @@ export default function DashboardPage() {
           const todasPagasOuCanceladas = invoices.length > 0 && 
             invoices.every(inv => 
               inv.status === "pago" || 
-              inv.status === "pagamentos_realizados" || 
               inv.status === "cancelado"
             );
           
@@ -261,7 +260,6 @@ export default function DashboardPage() {
             const valorPendente = invoices
               .filter(inv => 
                 inv.status !== "pago" && 
-                inv.status !== "pagamentos_realizados" && 
                 inv.status !== "cancelado"
               )
               .reduce((sum, inv) => sum + inv.valor, 0);

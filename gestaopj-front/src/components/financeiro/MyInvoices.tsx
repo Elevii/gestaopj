@@ -111,7 +111,7 @@ export default function MyInvoices() {
 
       // Recebido no Mês (baseado na data de pagamento)
       if (
-        (invoice.status === "pago" || invoice.status === "pagamentos_realizados") &&
+        invoice.status === "pago" &&
         dataPag &&
         dataPag.getMonth() === mesAtual &&
         dataPag.getFullYear() === anoAtual
@@ -120,12 +120,12 @@ export default function MyInvoices() {
       }
 
       // Em Atraso (não pago e vencido)
-      if (invoice.status !== "pago" && invoice.status !== "pagamentos_realizados" && invoice.status !== "cancelado" && dataVenc < hoje) {
+      if (invoice.status !== "pago" && invoice.status !== "cancelado" && dataVenc < hoje) {
         atrasado += invoice.valor;
       }
 
-      // A Receber (pendente, fatura_gerada ou atrasado)
-      if (invoice.status === "pendente" || invoice.status === "fatura_gerada" || invoice.status === "atrasado") {
+      // A Receber (pendente ou fatura_gerada)
+      if (invoice.status === "pendente" || invoice.status === "fatura_gerada") {
         aReceber += invoice.valor;
       }
     });
@@ -215,10 +215,8 @@ export default function MyInvoices() {
             >
               <option value="all">Todos</option>
               <option value="fatura_gerada">Fatura Gerada</option>
-              <option value="pagamentos_realizados">Pagamentos Realizados</option>
               <option value="pendente">Pendente</option>
               <option value="pago">Pago</option>
-              <option value="atrasado">Atrasado</option>
               <option value="cancelado">Cancelado</option>
             </select>
           </div>
@@ -318,7 +316,7 @@ export default function MyInvoices() {
               <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                 {invoicesFiltradas.map((invoice) => {
                   const isLate =
-                    invoice.status !== "pago" && invoice.status !== "pagamentos_realizados" &&
+                    invoice.status !== "pago" && invoice.status !== "cancelado" &&
                     parseISO(invoice.dataVencimento) < new Date();
                   const pendingLembretes = (invoice.lembretes || []).filter(
                     (l) => !l.concluido
@@ -358,9 +356,9 @@ export default function MyInvoices() {
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span
                           className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                            invoice.status === "pago" || invoice.status === "pagamentos_realizados"
+                            invoice.status === "pago"
                               ? "bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300"
-                              : isLate || invoice.status === "atrasado"
+                              : isLate
                               ? "bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300"
                               : invoice.status === "cancelado"
                               ? "bg-gray-100 text-gray-800 dark:bg-gray-900/50 dark:text-gray-300"
@@ -369,9 +367,9 @@ export default function MyInvoices() {
                               : "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-300"
                           }`}
                         >
-                          {invoice.status === "pago" || invoice.status === "pagamentos_realizados"
-                            ? "Pagamentos Realizados"
-                            : invoice.status === "atrasado"
+                          {invoice.status === "pago"
+                            ? "Pago"
+                            : isLate
                             ? "Atrasado"
                             : invoice.status === "cancelado"
                             ? "Cancelado"

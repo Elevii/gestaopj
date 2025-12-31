@@ -265,73 +265,74 @@ export default function GestaoFinanceiraPage() {
     });
 
     // Converter para array e ordenar por período (mais recente primeiro)
-    return Array.from(grouped.entries())
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      .map(([_, invoices]) => {
-        const totalValor = invoices.reduce((sum, inv) => sum + inv.valor, 0);
-        const totalPago = invoices
-          .filter((inv) => inv.status === "pago")
-          .reduce((sum, inv) => sum + inv.valor, 0);
-        const totalPendente = invoices
-          .filter(
-            (inv) =>
-              inv.status === "pendente" ||
-              inv.status === "fatura_gerada"
-          )
-          .reduce((sum, inv) => sum + inv.valor, 0);
+    return (
+      Array.from(grouped.entries())
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        .map(([_, invoices]) => {
+          const totalValor = invoices.reduce((sum, inv) => sum + inv.valor, 0);
+          const totalPago = invoices
+            .filter((inv) => inv.status === "pago")
+            .reduce((sum, inv) => sum + inv.valor, 0);
+          const totalPendente = invoices
+            .filter(
+              (inv) =>
+                inv.status === "pendente" || inv.status === "fatura_gerada"
+            )
+            .reduce((sum, inv) => sum + inv.valor, 0);
 
-        // Calcular status do período baseado nas faturas
-        // Se todas as faturas estão pagas e não há pendentes, período está pago
-        // Se todas as faturas estão canceladas, período está cancelado
-        // Se há faturas geradas mas não pagas, período está com faturas geradas
-        // Caso contrário, pendente
-        let periodoStatus:
-          | "fatura_gerada"
-          | "pago"
-          | "pendente"
-          | "parcialmente_pago"
-          | "cancelado";
-        const todasPagas =
-          invoices.length > 0 &&
-          invoices.every((inv) => inv.status === "pago");
-        const todasCanceladas =
-          invoices.length > 0 &&
-          invoices.every((inv) => inv.status === "cancelado");
-        const temGeradas = invoices.some(
-          (inv) => inv.status === "fatura_gerada"
-        );
-        const temPendentes = invoices.some(
-          (inv) => inv.status === "pendente"
-        );
-        const temPagas = invoices.some((inv) => inv.status === "pago");
+          // Calcular status do período baseado nas faturas
+          // Se todas as faturas estão pagas e não há pendentes, período está pago
+          // Se todas as faturas estão canceladas, período está cancelado
+          // Se há faturas geradas mas não pagas, período está com faturas geradas
+          // Caso contrário, pendente
+          let periodoStatus:
+            | "fatura_gerada"
+            | "pago"
+            | "pendente"
+            | "parcialmente_pago"
+            | "cancelado";
+          const todasPagas =
+            invoices.length > 0 &&
+            invoices.every((inv) => inv.status === "pago");
+          const todasCanceladas =
+            invoices.length > 0 &&
+            invoices.every((inv) => inv.status === "cancelado");
+          const temGeradas = invoices.some(
+            (inv) => inv.status === "fatura_gerada"
+          );
+          const temPendentes = invoices.some(
+            (inv) => inv.status === "pendente"
+          );
+          const temPagas = invoices.some((inv) => inv.status === "pago");
 
-        if (todasCanceladas) {
-          periodoStatus = "cancelado";
-        } else if (todasPagas) {
-          periodoStatus = "pago";
-        } else if (temGeradas && !temPendentes && !temPagas) {
-          periodoStatus = "fatura_gerada";
-        } else if (temPagas && (temPendentes || temGeradas)) {
-          periodoStatus = "parcialmente_pago";
-        } else {
-          periodoStatus = "pendente";
-        }
+          if (todasCanceladas) {
+            periodoStatus = "cancelado";
+          } else if (todasPagas) {
+            periodoStatus = "pago";
+          } else if (temGeradas && !temPendentes && !temPagas) {
+            periodoStatus = "fatura_gerada";
+          } else if (temPagas && (temPendentes || temGeradas)) {
+            periodoStatus = "parcialmente_pago";
+          } else {
+            periodoStatus = "pendente";
+          }
 
-        return {
-          periodoInicio: invoices[0].periodoInicio,
-          periodoFim: invoices[0].periodoFim,
-          invoices,
-          totalValor,
-          totalPago,
-          totalPendente,
-          status: periodoStatus,
-        };
-      })
-      .sort(
-        (a, b) =>
-          new Date(b.periodoInicio).getTime() -
-          new Date(a.periodoInicio).getTime()
-      );
+          return {
+            periodoInicio: invoices[0].periodoInicio,
+            periodoFim: invoices[0].periodoFim,
+            invoices,
+            totalValor,
+            totalPago,
+            totalPendente,
+            status: periodoStatus,
+          };
+        })
+        .sort(
+          (a, b) =>
+            new Date(b.periodoInicio).getTime() -
+            new Date(a.periodoInicio).getTime()
+        )
+    );
   }, [memberInvoices]);
 
   // Filtrar faturas pelo período selecionado
@@ -666,7 +667,10 @@ export default function GestaoFinanceiraPage() {
                     )?.map((invoice) => {
                       const user = users.get(invoice.userId);
                       const isPaid = invoice.status === "pago";
-                      const isLate = invoice.status !== "pago" && invoice.status !== "cancelado" && new Date(invoice.dataVencimento) < new Date();
+                      const isLate =
+                        invoice.status !== "pago" &&
+                        invoice.status !== "cancelado" &&
+                        new Date(invoice.dataVencimento) < new Date();
                       return (
                         <tr
                           key={invoice.id}

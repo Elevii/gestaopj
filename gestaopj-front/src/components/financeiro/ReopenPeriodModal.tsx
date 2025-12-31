@@ -74,8 +74,8 @@ export function ReopenPeriodModal({
               </h3>
               <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
                 Esta ação irá reverter todas as faturas pagas para o status
-                &quot;Pendente&quot;. Use apenas se precisar refazer o fechamento do
-                período.
+                &quot;Pendente&quot;. Use apenas se precisar refazer o
+                fechamento do período.
               </p>
             </div>
           </div>

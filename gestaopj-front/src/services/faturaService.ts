@@ -350,8 +350,8 @@ class FaturaService {
         atrasado += f.valor;
       }
 
-      // A Receber (pendente ou atrasado)
-      if (f.status === "pendente" || f.status === "atrasado") {
+      // A Receber (pendente ou fatura_gerada)
+      if (f.status === "pendente" || f.status === "fatura_gerada") {
         aReceber += f.valor;
       }
     });

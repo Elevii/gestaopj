@@ -152,7 +152,7 @@ export default function MemberPaymentClosure({ sharedSelectedPeriod, onPeriodCha
 
             // Verificar se todas as faturas estão pagas
             const todasPagas = periodInvoices.every(
-              (inv) => inv.status === "pago" || inv.status === "pagamentos_realizados"
+              (inv) => inv.status === "pago"
             );
 
             if (!todasPagas) {
@@ -212,21 +212,21 @@ export default function MemberPaymentClosure({ sharedSelectedPeriod, onPeriodCha
 
       // Calcular status do período
       const todasPagas = periodInvoices.every(
-        (inv) => inv.status === "pago" || inv.status === "pagamentos_realizados"
+        (inv) => inv.status === "pago"
       );
       const todasGeradas = periodInvoices.every(
         (inv) => inv.status === "fatura_gerada"
       );
       const temPagas = periodInvoices.some(
-        (inv) => inv.status === "pago" || inv.status === "pagamentos_realizados"
+        (inv) => inv.status === "pago"
       );
       const temPendentes = periodInvoices.some(
-        (inv) => inv.status === "pendente" || inv.status === "fatura_gerada" || inv.status === "atrasado"
+        (inv) => inv.status === "pendente" || inv.status === "fatura_gerada"
       );
 
       let status: string;
       if (todasPagas) {
-        status = "pagamentos_realizados";
+        status = "pago";
       } else if (todasGeradas && !temPagas) {
         status = "fatura_gerada";
       } else if (temPagas && temPendentes) {
@@ -684,7 +684,6 @@ export default function MemberPaymentClosure({ sharedSelectedPeriod, onPeriodCha
           inv.periodoInicio === dataInicio &&
           inv.periodoFim === dataFim &&
           inv.status !== "cancelado" &&
-          inv.status !== "pagamentos_realizados" &&
           inv.status !== "pago"
       );
 
@@ -697,7 +696,7 @@ export default function MemberPaymentClosure({ sharedSelectedPeriod, onPeriodCha
       const now = format(new Date(), "yyyy-MM-dd");
       for (const invoice of periodInvoices) {
         await memberInvoiceService.update(invoice.id, {
-          status: "pagamentos_realizados",
+          status: "pago",
           dataPagamento: now,
         });
       }
@@ -728,7 +727,7 @@ export default function MemberPaymentClosure({ sharedSelectedPeriod, onPeriodCha
               className={`inline-flex px-3 py-2 text-sm font-semibold rounded-full ${
                 !periodStatus || periodStatus === "sem_faturas"
                   ? "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300"
-                  : periodStatus === "pagamentos_realizados"
+                  : periodStatus === "pago"
                   ? "bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300"
                   : periodStatus === "fatura_gerada"
                   ? "bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300"
@@ -739,8 +738,8 @@ export default function MemberPaymentClosure({ sharedSelectedPeriod, onPeriodCha
             >
               {!periodStatus || periodStatus === "sem_faturas"
                 ? "Sem Faturas"
-                : periodStatus === "pagamentos_realizados"
-                ? "Pagamentos Realizados"
+                : periodStatus === "pago"
+                ? "Pago"
                 : periodStatus === "fatura_gerada"
                 ? "Fatura Gerada"
                 : periodStatus === "parcialmente_pago"
@@ -894,25 +893,19 @@ export default function MemberPaymentClosure({ sharedSelectedPeriod, onPeriodCha
                     {member.invoiceStatus ? (
                       <span
                         className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                          member.invoiceStatus === "pagamentos_realizados" || member.invoiceStatus === "pago"
+                          member.invoiceStatus === "pago"
                             ? "bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300"
                             : member.invoiceStatus === "fatura_gerada"
                             ? "bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300"
-                            : member.invoiceStatus === "atrasado"
-                            ? "bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300"
                             : member.invoiceStatus === "cancelado"
                             ? "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300"
                             : "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-300"
                         }`}
                       >
-                        {member.invoiceStatus === "pagamentos_realizados"
-                          ? "Pagamentos Realizados"
-                          : member.invoiceStatus === "pago"
+                        {member.invoiceStatus === "pago"
                           ? "Pago"
                           : member.invoiceStatus === "fatura_gerada"
                           ? "Fatura Gerada"
-                          : member.invoiceStatus === "atrasado"
-                          ? "Atrasado"
                           : member.invoiceStatus === "cancelado"
                           ? "Cancelado"
                           : "Pendente"}

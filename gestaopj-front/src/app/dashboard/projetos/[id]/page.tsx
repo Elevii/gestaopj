@@ -15,6 +15,7 @@ import { userService } from "@/services/userService";
 import { Atividade } from "@/types";
 import { useFormatDate } from "@/hooks/useFormatDate";
 import { useEffect } from "react";
+import { parseISO } from "date-fns";
 
 export default function ProjetoDetalhesPage() {
   const params = useParams();
@@ -206,7 +207,7 @@ export default function ProjetoDetalhesPage() {
     .filter(f => f.status === 'pago')
     .reduce((acc, f) => acc + f.valor, 0);
   const totalPendente = faturasDoProjeto
-    .filter(f => f.status === 'pendente' || f.status === 'atrasado')
+    .filter(f => f.status === 'pendente' || f.status === 'fatura_gerada')
     .reduce((acc, f) => acc + f.valor, 0);
 
   return (
@@ -744,21 +745,23 @@ export default function ProjetoDetalhesPage() {
                     </tr>
                   </thead>
                   <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                    {faturasDoProjeto.map((fatura) => (
+                    {faturasDoProjeto.map((fatura) => {
+                      const isLate = fatura.status !== 'pago' && fatura.status !== 'cancelado' && parseISO(fatura.dataVencimento) < new Date();
+                      return (
                       <tr key={fatura.id} className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span
                               className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
                                 fatura.status === "pago"
                                   ? "bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300"
-                                  : fatura.status === "atrasado"
+                                  : isLate
                                   ? "bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300"
                                   : fatura.status === "cancelado"
                                   ? "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300"
                                   : "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-300"
                               }`}
                             >
-                              {fatura.status === "pago" ? "Pago" : fatura.status === "atrasado" ? "Atrasado" : fatura.status === "cancelado" ? "Cancelado" : "Pendente"}
+                              {fatura.status === "pago" ? "Pago" : isLate ? "Atrasado" : fatura.status === "cancelado" ? "Cancelado" : "Pendente"}
                             </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
@@ -771,7 +774,7 @@ export default function ProjetoDetalhesPage() {
                           {formatCurrency(fatura.valor)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                           {fatura.status === 'pendente' || fatura.status === 'atrasado' ? (
+                           {fatura.status === 'pendente' || fatura.status === 'fatura_gerada' ? (
                              <button
                                onClick={() => updateFatura(fatura.id, { status: 'pago', dataPagamento: new Date().toISOString() })}
                                className="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400"
@@ -783,7 +786,7 @@ export default function ProjetoDetalhesPage() {
                            )}
                         </td>
                       </tr>
-                    ))}
+                    );})}
                   </tbody>
                 </table>
               </div>
