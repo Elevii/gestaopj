@@ -28,12 +28,31 @@ async function bootstrap() {
     
     // Habilitar CORS
     const frontendUrl = process.env.FRONTEND_URL;
-    console.log('FRONTEND_URL:', frontendUrl || 'not set (CORS enabled for all origins)');
+    console.log('FRONTEND_URL:', frontendUrl || 'not set');
+    
+    // Lista de origens permitidas
+    const allowedOrigins = frontendUrl 
+      ? [frontendUrl, 'http://localhost:3000', 'https://gestaopj.vercel.app'] 
+      : ['http://localhost:3000', 'https://gestaopj.vercel.app'];
+    
+    console.log('🌐 CORS allowed origins:', allowedOrigins);
+    
     app.enableCors({
-      origin: frontendUrl 
-        ? [frontendUrl, 'http://localhost:3000'] 
-        : true, // Em desenvolvimento, aceitar qualquer origem
+      origin: (origin, callback) => {
+        // Permite requisições sem origin (como mobile apps ou Postman)
+        if (!origin) return callback(null, true);
+        
+        // Verifica se a origin está na lista permitida
+        if (allowedOrigins.some(allowed => origin.startsWith(allowed))) {
+          callback(null, true);
+        } else {
+          console.warn('⚠️ CORS bloqueado para origin:', origin);
+          callback(new Error('Não permitido pelo CORS'));
+        }
+      },
       credentials: true,
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'Authorization'],
     });
     
     // Habilitar validação global
