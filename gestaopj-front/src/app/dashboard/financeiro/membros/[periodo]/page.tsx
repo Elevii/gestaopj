@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import { useCompany } from "@/contexts/CompanyContext";
+import { useToast } from "@/contexts/ToastContext";
 import { memberInvoiceService } from "@/services/memberInvoiceService";
 import { userService } from "@/services/userService";
 import { MemberInvoice } from "@/types/memberInvoice";
@@ -13,6 +14,10 @@ import { ptBR } from "date-fns/locale";
 import { useFormatDate } from "@/hooks/useFormatDate";
 import Link from "next/link";
 import AddMembersToInvoiceModal from "@/components/financeiro/AddMembersToInvoiceModal";
+import { InvoiceFilters } from "@/components/financeiro/InvoiceFilters";
+import { InvoiceStats } from "@/components/financeiro/InvoiceStats";
+import { ReopenPeriodModal } from "@/components/financeiro/ReopenPeriodModal";
+import { ConfirmationModal } from "@/components/financeiro/ConfirmationModal";
 
 interface InvoiceWithUser extends MemberInvoice {
   user: User | null;
@@ -20,12 +25,15 @@ interface InvoiceWithUser extends MemberInvoice {
 
 export default function MemberInvoicesDetailPage() {
   const params = useParams();
-  const router = useRouter();
   const { company } = useCompany();
+  const { showToast } = useToast();
   const { formatDate } = useFormatDate();
   const [invoices, setInvoices] = useState<InvoiceWithUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddMembersModal, setShowAddMembersModal] = useState(false);
+  const [showReopenModal, setShowReopenModal] = useState(false);
+  const [showBulkPaymentModal, setShowBulkPaymentModal] = useState(false);
+  const [actionLoading, setActionLoading] = useState<{ [key: string]: boolean }>({});
   
   // Filtros
   const [searchName, setSearchName] = useState("");
@@ -169,18 +177,11 @@ export default function MemberInvoicesDetailPage() {
     );
 
     if (pendingInvoices.length === 0) {
-      alert("Não há faturas pendentes para pagar.");
+      showToast("Não há faturas pendentes para pagar", "info");
       return;
     }
 
-    if (
-      !confirm(
-        `Deseja marcar como pagas ${pendingInvoices.length} faturas pendentes?`
-      )
-    ) {
-      return;
-    }
-
+    setActionLoading({ bulk: true });
     try {
       const now = new Date().toISOString();
       await Promise.all(
@@ -191,45 +192,52 @@ export default function MemberInvoicesDetailPage() {
           })
         )
       );
+      showToast(
+        `${pendingInvoices.length} fatura(s) marcada(s) como paga(s) com sucesso!`,
+        "success"
+      );
       await reloadInvoices();
     } catch (error) {
       console.error("Erro ao processar pagamento em massa:", error);
-      alert("Erro ao processar pagamento em massa.");
+      showToast("Erro ao processar pagamento em massa", "error");
+    } finally {
+      setActionLoading({});
+      setShowBulkPaymentModal(false);
     }
   };
 
   // Pagamento individual
   const handlePayment = async (invoiceId: string) => {
-    if (!confirm("Deseja marcar esta fatura como paga?")) {
-      return;
-    }
-
+    setActionLoading({ [invoiceId]: true });
     try {
       await memberInvoiceService.update(invoiceId, {
         status: "pago",
         dataPagamento: new Date().toISOString(),
       });
+      showToast("Fatura marcada como paga com sucesso!", "success");
       await reloadInvoices();
     } catch (error) {
       console.error("Erro ao processar pagamento:", error);
-      alert("Erro ao processar pagamento.");
+      showToast("Erro ao processar pagamento", "error");
+    } finally {
+      setActionLoading({});
     }
   };
 
   // Cancelar fatura
   const handleCancel = async (invoiceId: string) => {
-    if (!confirm("Deseja cancelar esta fatura?")) {
-      return;
-    }
-
+    setActionLoading({ [invoiceId]: true });
     try {
       await memberInvoiceService.update(invoiceId, {
         status: "cancelado",
       });
+      showToast("Fatura cancelada com sucesso!", "success");
       await reloadInvoices();
     } catch (error) {
       console.error("Erro ao cancelar fatura:", error);
-      alert("Erro ao cancelar fatura.");
+      showToast("Erro ao cancelar fatura", "error");
+    } finally {
+      setActionLoading({});
     }
   };
 
@@ -243,15 +251,7 @@ export default function MemberInvoicesDetailPage() {
   // Reabrir período (mudar todas as faturas de "pago" para "pendente")
   const handleReopenPeriod = async () => {
     if (!allInvoicesPaid) {
-      alert("Só é possível reabrir um período quando todas as faturas estiverem pagas.");
-      return;
-    }
-
-    if (
-      !confirm(
-        "Tem certeza que deseja reabrir este período? Todas as faturas voltarão para o status 'Pendente'."
-      )
-    ) {
+      showToast("Só é possível reabrir um período quando todas as faturas estiverem pagas", "warning");
       return;
     }
 
@@ -259,16 +259,14 @@ export default function MemberInvoicesDetailPage() {
       console.log("🔄 Reabrindo período...");
 
       // Reabrir todas as faturas pagas
-      const paidInvoices = invoices.filter(
-        (inv) => inv.status === "pago"
-      );
+      const paidInvoices = invoices.filter((inv) => inv.status === "pago");
 
       await Promise.all(
         paidInvoices.map((inv) => memberInvoiceService.reopenInvoice(inv.id))
       );
 
       console.log("✅ Período reaberto com sucesso");
-      alert("Período reaberto! Todas as faturas voltaram para 'Pendente'.");
+      showToast("Período reaberto! Todas as faturas voltaram para 'Pendente'", "success");
       await reloadInvoices();
     } catch (error) {
       console.error("Erro ao reabrir período:", error);
@@ -371,8 +369,8 @@ export default function MemberInvoicesDetailPage() {
           {/* Botão Reabrir Período - só aparece se todas estiverem pagas */}
           {allInvoicesPaid && (
             <button
-              onClick={handleReopenPeriod}
-              className="inline-flex items-center px-4 py-2 border border-yellow-600 dark:border-yellow-500 text-sm font-medium rounded-lg text-yellow-600 dark:text-yellow-400 hover:bg-yellow-50 dark:hover:bg-yellow-900/20 transition-colors"
+              onClick={() => setShowReopenModal(true)}
+              className="inline-flex items-center px-4 py-2 border border-yellow-600 dark:border-yellow-500 text-sm font-medium rounded-lg text-yellow-600 dark:text-yellow-400 hover:bg-yellow-50 dark:hover:bg-yellow-900/20 transition-all"
             >
               <svg
                 className="w-5 h-5 mr-2"
@@ -396,55 +394,43 @@ export default function MemberInvoicesDetailPage() {
             (inv) => inv.status !== "pago" && inv.status !== "cancelado"
           ).length > 0 && (
             <button
-              onClick={handleBulkPayment}
-              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors"
+              onClick={() => setShowBulkPaymentModal(true)}
+              disabled={actionLoading.bulk}
+              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <svg
-                className="w-5 h-5 mr-2"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
-              </svg>
-              Pagar Todas Pendentes
+              {actionLoading.bulk ? (
+                <svg className="animate-spin h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                </svg>
+              ) : (
+                <svg
+                  className="w-5 h-5 mr-2"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+              )}
+              {actionLoading.bulk ? "Processando..." : "Pagar Todas Pendentes"}
             </button>
           )}
         </div>
       </div>
 
       {/* Totalizadores */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-          <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">
-            Total
-          </h3>
-          <p className="mt-2 text-3xl font-bold text-gray-900 dark:text-white">
-            {formatCurrency(totalizadores.total)}
-          </p>
-        </div>
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-          <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">
-            Pago
-          </h3>
-          <p className="mt-2 text-3xl font-bold text-green-600 dark:text-green-400">
-            {formatCurrency(totalizadores.pago)}
-          </p>
-        </div>
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-          <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">
-            Pendente
-          </h3>
-          <p className="mt-2 text-3xl font-bold text-yellow-600 dark:text-yellow-400">
-            {formatCurrency(totalizadores.pendente)}
-          </p>
-        </div>
-      </div>
+      <InvoiceStats
+        total={totalizadores.total}
+        pago={totalizadores.pago}
+        pendente={totalizadores.pendente}
+        formatCurrency={formatCurrency}
+      />
 
       {/* Listagem de Faturas */}
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
@@ -456,50 +442,16 @@ export default function MemberInvoicesDetailPage() {
           </div>
           
           {/* Filtros */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wider">
-                Pesquisar por Nome
-              </label>
-              <input
-                type="text"
-                value={searchName}
-                onChange={(e) => setSearchName(e.target.value)}
-                placeholder="Digite o nome ou email..."
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wider">
-                Filtrar por Status
-              </label>
-              <select
-                value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value as StatusFatura | "all")}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm"
-              >
-                <option value="all">Todos</option>
-                <option value="pendente">Pendente</option>
-                <option value="fatura_gerada">Fatura Gerada</option>
-                <option value="pago">Pago</option>
-                <option value="cancelado">Cancelado</option>
-              </select>
-            </div>
-            <div className="flex items-end">
-              <button
-                onClick={() => {
-                  setSearchName("");
-                  setFilterStatus("all");
-                }}
-                className="w-full px-3 py-2 text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors flex items-center justify-center gap-1 border border-gray-200 dark:border-gray-700 rounded-lg"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-                Limpar Filtros
-              </button>
-            </div>
-          </div>
+          <InvoiceFilters
+            searchName={searchName}
+            onSearchNameChange={setSearchName}
+            filterStatus={filterStatus}
+            onFilterStatusChange={setFilterStatus}
+            onClearFilters={() => {
+              setSearchName("");
+              setFilterStatus("all");
+            }}
+          />
         </div>
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
@@ -677,14 +629,26 @@ export default function MemberInvoicesDetailPage() {
                           <>
                             <button
                               onClick={() => handlePayment(invoice.id)}
-                              className="text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300 font-medium"
+                              disabled={!!actionLoading[invoice.id]}
+                              className="text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300 font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
                               title="Marcar como pago"
                             >
-                              Pagar
+                              {actionLoading[invoice.id] ? (
+                                <>
+                                  <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                  </svg>
+                                  <span className="text-xs">...</span>
+                                </>
+                              ) : (
+                                "Pagar"
+                              )}
                             </button>
                             <button
                               onClick={() => handleCancel(invoice.id)}
-                              className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300 font-medium"
+                              disabled={!!actionLoading[invoice.id]}
+                              className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                               title="Cancelar fatura"
                             >
                               Cancelar
@@ -715,6 +679,26 @@ export default function MemberInvoicesDetailPage() {
         periodoFim={periodoFim}
         existingMemberIds={existingMemberIds}
         onMembersAdded={reloadInvoices}
+      />
+
+      {/* Modal Reabrir Período */}
+      <ReopenPeriodModal
+        isOpen={showReopenModal}
+        onClose={() => setShowReopenModal(false)}
+        onConfirm={handleReopenPeriod}
+        invoices={invoices}
+        formatCurrency={formatCurrency}
+      />
+
+      {/* Modal Pagamento em Massa */}
+      <ConfirmationModal
+        isOpen={showBulkPaymentModal}
+        onClose={() => setShowBulkPaymentModal(false)}
+        onConfirm={handleBulkPayment}
+        title="Pagamento em Massa"
+        message={`Deseja marcar ${invoices.filter((inv) => inv.status !== "pago" && inv.status !== "cancelado").length} fatura(s) como pagas?\n\nEsta ação irá atualizar o status de todas as faturas pendentes para "Pago" e registrar a data de pagamento.`}
+        confirmText="Confirmar Pagamento"
+        type="info"
       />
     </div>
   );
