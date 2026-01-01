@@ -5,7 +5,16 @@ import {
   Lembrete,
   CreateLembreteDTO,
 } from "@/types";
-import { addDays, addMonths, addWeeks, addYears, parseISO, isWithinInterval, startOfDay, endOfDay } from "date-fns";
+import {
+  addDays,
+  addMonths,
+  addWeeks,
+  addYears,
+  parseISO,
+  isWithinInterval,
+  startOfDay,
+  endOfDay,
+} from "date-fns";
 import { authService } from "./authService";
 import { projetoService } from "./projetoService";
 import { atuacaoService } from "./atuacaoService";
@@ -40,18 +49,18 @@ class FaturaService {
   async findAll(companyId?: string): Promise<Fatura[]> {
     await new Promise((resolve) => setTimeout(resolve, 300));
     const faturas = this.getFaturasFromStorage();
-    
+
     // Se companyId fornecido, filtrar por empresa
     if (companyId) {
       return faturas.filter((f) => f.companyId === companyId);
     }
-    
+
     // Se não fornecido, usar empresa do usuário logado
     const currentCompany = await authService.getCurrentCompany();
     if (currentCompany) {
       return faturas.filter((f) => f.companyId === currentCompany.id);
     }
-    
+
     return faturas;
   }
 
@@ -110,46 +119,43 @@ class FaturaService {
       ];
 
       // Gera lembretes para esta fatura
-      const lembretes: Lembrete[] = lembretesIniciais.map(
-        (dto) => {
-          let dataLembrete = dataVencimento; // default
+      const lembretes: Lembrete[] = lembretesIniciais.map((dto) => {
+        let dataLembrete = dataVencimento; // default
 
-          if (dto.dataFixa) {
-            dataLembrete = parseISO(dto.dataFixa);
-            
-            // Se for recorrente, ajustamos a data do lembrete também
-            if (i > 0 && frequencia) {
-               switch (frequencia) {
-                case "semanal":
-                  dataLembrete = addWeeks(dataLembrete, i);
-                  break;
-                case "quinzenal":
-                  dataLembrete = addWeeks(dataLembrete, i * 2);
-                  break;
-                case "mensal":
-                  dataLembrete = addMonths(dataLembrete, i);
-                  break;
-                case "anual":
-                  dataLembrete = addYears(dataLembrete, i);
-                  break;
-              }
+        if (dto.dataFixa) {
+          dataLembrete = parseISO(dto.dataFixa);
+
+          // Se for recorrente, ajustamos a data do lembrete também
+          if (i > 0 && frequencia) {
+            switch (frequencia) {
+              case "semanal":
+                dataLembrete = addWeeks(dataLembrete, i);
+                break;
+              case "quinzenal":
+                dataLembrete = addWeeks(dataLembrete, i * 2);
+                break;
+              case "mensal":
+                dataLembrete = addMonths(dataLembrete, i);
+                break;
+              case "anual":
+                dataLembrete = addYears(dataLembrete, i);
+                break;
             }
-
-          } else if (dto.diasAntesVencimento !== undefined) {
-            dataLembrete = addDays(dataVencimento, -dto.diasAntesVencimento);
           }
-
-          return {
-            id: `lemb_${Date.now()}_${Math.random()
-              .toString(36)
-              .substr(2, 9)}_${i}_${Math.random().toString(36).substr(2, 5)}`,
-            faturaId: "", // será preenchido após criar ID da fatura
-            titulo: dto.titulo,
-            data: dataLembrete.toISOString(),
-            concluido: false,
-          };
+        } else if (dto.diasAntesVencimento !== undefined) {
+          dataLembrete = addDays(dataVencimento, -dto.diasAntesVencimento);
         }
-      );
+
+        return {
+          id: `lemb_${Date.now()}_${Math.random()
+            .toString(36)
+            .substr(2, 9)}_${i}_${Math.random().toString(36).substr(2, 5)}`,
+          faturaId: "", // será preenchido após criar ID da fatura
+          titulo: dto.titulo,
+          data: dataLembrete.toISOString(),
+          concluido: false,
+        };
+      });
 
       const faturaId = `fat_${Date.now()}_${Math.random()
         .toString(36)
@@ -157,7 +163,7 @@ class FaturaService {
 
       // Atualiza ID da fatura nos lembretes
       lembretes.forEach((l) => (l.faturaId = faturaId));
-      
+
       let tituloFatura = data.titulo;
       if (repeticoes > 1) {
         tituloFatura = `${data.titulo} (${i + 1}/${repeticoes})`;
@@ -172,7 +178,9 @@ class FaturaService {
 
       // Validar período obrigatório
       if (!data.periodoInicio || !data.periodoFim) {
-        throw new Error("Período de faturamento é obrigatório (periodoInicio e periodoFim)");
+        throw new Error(
+          "Período de faturamento é obrigatório (periodoInicio e periodoFim)"
+        );
       }
 
       const periodoInicio = parseISO(data.periodoInicio);
@@ -183,7 +191,8 @@ class FaturaService {
       if (horasTrabalhadas === undefined && userId) {
         const atuacoes = await atuacaoService.findAll(projeto.companyId);
         const atuacoesDoPeriodo = atuacoes.filter((a) => {
-          if (a.projetoId !== data.projetoId || a.userId !== userId) return false;
+          if (a.projetoId !== data.projetoId || a.userId !== userId)
+            return false;
           const dataAtuacao = parseISO(a.data);
           return isWithinInterval(dataAtuacao, {
             start: startOfDay(periodoInicio),
@@ -197,7 +206,9 @@ class FaturaService {
       }
 
       // Determinar tipo de cálculo e calcular valor
-      let tipoCalculo: "horas" | "fixo" = data.tipoCalculo || (projeto.tipoCobranca === "horas" ? "horas" : "fixo");
+      let tipoCalculo: "horas" | "fixo" =
+        data.tipoCalculo ||
+        (projeto.tipoCobranca === "horas" ? "horas" : "fixo");
       let valor = data.valor;
       let valorPorHora = data.valorPorHora;
 
@@ -254,7 +265,9 @@ class FaturaService {
       novasFaturas.push(novaFatura);
 
       // Criar status de etapas automaticamente para todas as etapas ativas da empresa
-      const etapasAtivas = await faturaEtapaService.findAtivasByCompanyId(projeto.companyId);
+      const etapasAtivas = await faturaEtapaService.findAtivasByCompanyId(
+        projeto.companyId
+      );
       for (const etapa of etapasAtivas) {
         await faturaEtapaStatusService.create({
           faturaId: faturaId,
@@ -312,7 +325,7 @@ class FaturaService {
   }> {
     await new Promise((resolve) => setTimeout(resolve, 300));
     let faturas = this.getFaturasFromStorage();
-    
+
     // Filtrar por empresa se especificado ou usar empresa ativa
     if (companyId) {
       faturas = faturas.filter((f) => f.companyId === companyId);
@@ -322,7 +335,7 @@ class FaturaService {
         faturas = faturas.filter((f) => f.companyId === currentCompany.id);
       }
     }
-    
+
     const hoje = new Date();
     const mesAtual = hoje.getMonth();
     const anoAtual = hoje.getFullYear();

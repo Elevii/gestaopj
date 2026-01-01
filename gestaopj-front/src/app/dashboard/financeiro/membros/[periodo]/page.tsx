@@ -18,6 +18,7 @@ import { InvoiceFilters } from "@/components/financeiro/InvoiceFilters";
 import { InvoiceStats } from "@/components/financeiro/InvoiceStats";
 import { ReopenPeriodModal } from "@/components/financeiro/ReopenPeriodModal";
 import { ConfirmationModal } from "@/components/financeiro/ConfirmationModal";
+import { EditInvoiceModal } from "@/components/financeiro/EditInvoiceModal";
 
 interface InvoiceWithUser extends MemberInvoice {
   user: User | null;
@@ -33,6 +34,10 @@ export default function MemberInvoicesDetailPage() {
   const [showAddMembersModal, setShowAddMembersModal] = useState(false);
   const [showReopenModal, setShowReopenModal] = useState(false);
   const [showBulkPaymentModal, setShowBulkPaymentModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [invoiceToEdit, setInvoiceToEdit] = useState<InvoiceWithUser | null>(
+    null
+  );
   const [actionLoading, setActionLoading] = useState<{
     [key: string]: boolean;
   }>({});
@@ -251,6 +256,17 @@ export default function MemberInvoicesDetailPage() {
     } finally {
       setActionLoading({});
     }
+  };
+
+  // Editar fatura
+  const handleEditClick = (invoice: InvoiceWithUser) => {
+    setInvoiceToEdit(invoice);
+    setShowEditModal(true);
+  };
+
+  const handleInvoiceUpdated = () => {
+    showToast("Fatura atualizada com sucesso!", "success");
+    reloadInvoices();
   };
 
   // Verificar se todas as faturas estão pagas
@@ -665,6 +681,14 @@ export default function MemberInvoicesDetailPage() {
                           invoice.status !== "cancelado" && (
                             <>
                               <button
+                                onClick={() => handleEditClick(invoice)}
+                                disabled={!!actionLoading[invoice.id]}
+                                className="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                                title="Editar fatura"
+                              >
+                                Editar
+                              </button>
+                              <button
                                 onClick={() => handlePayment(invoice.id)}
                                 disabled={!!actionLoading[invoice.id]}
                                 className="text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300 font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
@@ -735,6 +759,17 @@ export default function MemberInvoicesDetailPage() {
         onMembersAdded={reloadInvoices}
       />
 
+      {/* Modal Editar Fatura */}
+      <EditInvoiceModal
+        isOpen={showEditModal}
+        onClose={() => {
+          setShowEditModal(false);
+          setInvoiceToEdit(null);
+        }}
+        invoice={invoiceToEdit}
+        onInvoiceUpdated={handleInvoiceUpdated}
+        formatCurrency={formatCurrency}
+      />
       {/* Modal Reabrir Período */}
       <ReopenPeriodModal
         isOpen={showReopenModal}

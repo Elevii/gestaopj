@@ -16,7 +16,7 @@ export default function MyInvoices() {
   const { formatDate } = useFormatDate();
   const [invoices, setInvoices] = useState<MemberInvoice[]>([]);
   const [loading, setLoading] = useState(true);
-  
+
   // Filtros
   const [filters, setFilters] = useState({
     periodoInicio: "",
@@ -63,7 +63,9 @@ export default function MyInvoices() {
     );
 
     try {
-      await memberInvoiceService.update(invoice.id, { lembretes: newLembretes });
+      await memberInvoiceService.update(invoice.id, {
+        lembretes: newLembretes,
+      });
       await loadInvoices();
     } catch (error) {
       console.error("Erro ao atualizar lembrete:", error);
@@ -87,7 +89,8 @@ export default function MyInvoices() {
           ? invoice.periodoFim.split("T")[0]
           : invoice.periodoFim;
 
-        if (filters.periodoInicio && periodoInicio < filters.periodoInicio) return false;
+        if (filters.periodoInicio && periodoInicio < filters.periodoInicio)
+          return false;
         if (filters.periodoFim && periodoFim > filters.periodoFim) return false;
       }
 
@@ -107,7 +110,9 @@ export default function MyInvoices() {
 
     invoicesFiltradas.forEach((invoice) => {
       const dataVenc = parseISO(invoice.dataVencimento);
-      const dataPag = invoice.dataPagamento ? parseISO(invoice.dataPagamento) : null;
+      const dataPag = invoice.dataPagamento
+        ? parseISO(invoice.dataPagamento)
+        : null;
 
       // Recebido no Mês (baseado na data de pagamento)
       if (
@@ -120,7 +125,11 @@ export default function MyInvoices() {
       }
 
       // Em Atraso (não pago e vencido)
-      if (invoice.status !== "pago" && invoice.status !== "cancelado" && dataVenc < hoje) {
+      if (
+        invoice.status !== "pago" &&
+        invoice.status !== "cancelado" &&
+        dataVenc < hoje
+      ) {
         atrasado += invoice.valor;
       }
 
@@ -144,7 +153,9 @@ export default function MyInvoices() {
   if (loading) {
     return (
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-        <p className="text-gray-600 dark:text-gray-400">Carregando faturas...</p>
+        <p className="text-gray-600 dark:text-gray-400">
+          Carregando faturas...
+        </p>
       </div>
     );
   }
@@ -189,7 +200,9 @@ export default function MyInvoices() {
             <input
               type="date"
               value={filters.periodoInicio}
-              onChange={(e) => setFilters({ ...filters, periodoInicio: e.target.value })}
+              onChange={(e) =>
+                setFilters({ ...filters, periodoInicio: e.target.value })
+              }
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm"
             />
           </div>
@@ -200,7 +213,9 @@ export default function MyInvoices() {
             <input
               type="date"
               value={filters.periodoFim}
-              onChange={(e) => setFilters({ ...filters, periodoFim: e.target.value })}
+              onChange={(e) =>
+                setFilters({ ...filters, periodoFim: e.target.value })
+              }
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm"
             />
           </div>
@@ -210,7 +225,12 @@ export default function MyInvoices() {
             </label>
             <select
               value={filters.status}
-              onChange={(e) => setFilters({ ...filters, status: e.target.value as StatusFatura | "all" })}
+              onChange={(e) =>
+                setFilters({
+                  ...filters,
+                  status: e.target.value as StatusFatura | "all",
+                })
+              }
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm"
             >
               <option value="all">Todos</option>
@@ -225,8 +245,18 @@ export default function MyInvoices() {
               onClick={clearFilters}
               className="w-full px-3 py-2 text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors flex items-center justify-center gap-1 border border-gray-200 dark:border-gray-700 rounded-lg"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M6 18L18 6M6 6l12 12"
+                />
               </svg>
               Limpar
             </button>
@@ -266,12 +296,26 @@ export default function MyInvoices() {
       {invoicesFiltradas.length === 0 ? (
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-12 text-center">
           <div className="flex justify-center mb-4">
-            <svg className="w-16 h-16 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            <svg
+              className="w-16 h-16 text-gray-400"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={1.5}
+                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+              />
             </svg>
           </div>
-          <h3 className="text-lg font-medium text-gray-900 dark:text-white">Nenhum resultado encontrado</h3>
-          <p className="text-gray-500 dark:text-gray-400 mt-1">Tente ajustar os filtros para encontrar o que procura.</p>
+          <h3 className="text-lg font-medium text-gray-900 dark:text-white">
+            Nenhum resultado encontrado
+          </h3>
+          <p className="text-gray-500 dark:text-gray-400 mt-1">
+            Tente ajustar os filtros para encontrar o que procura.
+          </p>
           <button
             onClick={clearFilters}
             className="mt-4 text-indigo-600 hover:text-indigo-500 font-medium"
@@ -290,25 +334,46 @@ export default function MyInvoices() {
             <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
               <thead className="bg-gray-50 dark:bg-gray-900">
                 <tr>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  <th
+                    scope="col"
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
+                  >
                     Título
                   </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  <th
+                    scope="col"
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
+                  >
                     Período
                   </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  <th
+                    scope="col"
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
+                  >
                     Vencimento
                   </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  <th
+                    scope="col"
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
+                  >
                     Horas
                   </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  <th
+                    scope="col"
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
+                  >
                     Valor
                   </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  <th
+                    scope="col"
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
+                  >
                     Status
                   </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  <th
+                    scope="col"
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
+                  >
                     Lembretes
                   </th>
                 </tr>
@@ -316,7 +381,8 @@ export default function MyInvoices() {
               <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                 {invoicesFiltradas.map((invoice) => {
                   const isLate =
-                    invoice.status !== "pago" && invoice.status !== "cancelado" &&
+                    invoice.status !== "pago" &&
+                    invoice.status !== "cancelado" &&
                     parseISO(invoice.dataVencimento) < new Date();
                   const pendingLembretes = (invoice.lembretes || []).filter(
                     (l) => !l.concluido
@@ -334,8 +400,15 @@ export default function MyInvoices() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-900 dark:text-white">
-                          {format(parseISO(invoice.periodoInicio), "dd/MM/yyyy", { locale: ptBR })} a{" "}
-                          {format(parseISO(invoice.periodoFim), "dd/MM/yyyy", { locale: ptBR })}
+                          {format(
+                            parseISO(invoice.periodoInicio),
+                            "dd/MM/yyyy",
+                            { locale: ptBR }
+                          )}{" "}
+                          a{" "}
+                          {format(parseISO(invoice.periodoFim), "dd/MM/yyyy", {
+                            locale: ptBR,
+                          })}
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
@@ -345,7 +418,9 @@ export default function MyInvoices() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-900 dark:text-white">
-                          {invoice.tipoCalculo === "horas" ? `${invoice.horasTrabalhadas.toFixed(1)}h` : "-"}
+                          {invoice.tipoCalculo === "horas"
+                            ? `${invoice.horasTrabalhadas.toFixed(1)}h`
+                            : "-"}
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
@@ -359,33 +434,37 @@ export default function MyInvoices() {
                             invoice.status === "pago"
                               ? "bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300"
                               : isLate
-                              ? "bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300"
-                              : invoice.status === "cancelado"
-                              ? "bg-gray-100 text-gray-800 dark:bg-gray-900/50 dark:text-gray-300"
-                              : invoice.status === "fatura_gerada"
-                              ? "bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300"
-                              : "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-300"
+                                ? "bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300"
+                                : invoice.status === "cancelado"
+                                  ? "bg-gray-100 text-gray-800 dark:bg-gray-900/50 dark:text-gray-300"
+                                  : invoice.status === "fatura_gerada"
+                                    ? "bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300"
+                                    : "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-300"
                           }`}
                         >
                           {invoice.status === "pago"
                             ? "Pago"
                             : isLate
-                            ? "Atrasado"
-                            : invoice.status === "cancelado"
-                            ? "Cancelado"
-                            : invoice.status === "fatura_gerada"
-                            ? "Fatura Gerada"
-                            : "Pendente"}
+                              ? "Atrasado"
+                              : invoice.status === "cancelado"
+                                ? "Cancelado"
+                                : invoice.status === "fatura_gerada"
+                                  ? "Fatura Gerada"
+                                  : "Pendente"}
                         </span>
                       </td>
                       <td className="px-6 py-4">
                         <div className="text-sm text-gray-900 dark:text-white">
                           {pendingLembretes.length > 0 ? (
                             <span className="text-yellow-600 dark:text-yellow-400">
-                              {pendingLembretes.length} pendente{pendingLembretes.length > 1 ? "s" : ""}
+                              {pendingLembretes.length} pendente
+                              {pendingLembretes.length > 1 ? "s" : ""}
                             </span>
-                          ) : invoice.lembretes && invoice.lembretes.length > 0 ? (
-                            <span className="text-green-600 dark:text-green-400">Concluído</span>
+                          ) : invoice.lembretes &&
+                            invoice.lembretes.length > 0 ? (
+                            <span className="text-green-600 dark:text-green-400">
+                              Concluído
+                            </span>
                           ) : (
                             <span className="text-gray-400">-</span>
                           )}
@@ -402,4 +481,3 @@ export default function MyInvoices() {
     </div>
   );
 }
-

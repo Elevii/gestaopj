@@ -12,7 +12,15 @@ import { CompanyMembership } from "@/types/companyMembership";
 import { User } from "@/types/user";
 import { UserCompanySettings } from "@/types/userCompanySettings";
 import { Lembrete, StatusFatura } from "@/types/index";
-import { differenceInDays, format, parse, startOfMonth, addMonths, setDate, endOfMonth } from "date-fns";
+import {
+  differenceInDays,
+  format,
+  parse,
+  startOfMonth,
+  addMonths,
+  setDate,
+  endOfMonth,
+} from "date-fns";
 import { ptBR } from "date-fns/locale";
 
 interface MemberWithData extends CompanyMembership {
@@ -29,21 +37,32 @@ interface MemberPaymentClosureProps {
   onPeriodChange?: (period: string) => void;
 }
 
-export default function MemberPaymentClosure({ sharedSelectedPeriod, onPeriodChange }: MemberPaymentClosureProps = {}) {
+export default function MemberPaymentClosure({
+  sharedSelectedPeriod,
+  onPeriodChange,
+}: MemberPaymentClosureProps = {}) {
   const { company } = useCompany();
   const [members, setMembers] = useState<MemberWithData[]>([]);
   const [loading, setLoading] = useState(true);
-  const [editingValue, setEditingValue] = useState<{ [key: string]: string }>({});
+  const [editingValue, setEditingValue] = useState<{ [key: string]: string }>(
+    {}
+  );
   const [saving, setSaving] = useState<{ [key: string]: boolean }>({});
   const [savedValues, setSavedValues] = useState<{ [key: string]: number }>({}); // Valores editados persistidos
   const [showSummaryModal, setShowSummaryModal] = useState(false);
-  const [selectedMembers, setSelectedMembers] = useState<Set<string>>(new Set());
+  const [selectedMembers, setSelectedMembers] = useState<Set<string>>(
+    new Set()
+  );
   const [memberSearch, setMemberSearch] = useState("");
-  const [etapas, setEtapas] = useState<Array<{ nome: string; data: string }>>([]);
+  const [etapas, setEtapas] = useState<Array<{ nome: string; data: string }>>(
+    []
+  );
   const [novaEtapaNome, setNovaEtapaNome] = useState("");
   const [novaEtapaData, setNovaEtapaData] = useState("");
-  const [periodStatus, setPeriodStatus] = useState<string | null>("sem_faturas");
-  
+  const [periodStatus, setPeriodStatus] = useState<string | null>(
+    "sem_faturas"
+  );
+
   // Interface para período de faturamento
   interface BillingPeriod {
     inicio: string;
@@ -60,29 +79,41 @@ export default function MemberPaymentClosure({ sharedSelectedPeriod, onPeriodCha
     endMonthOffset: number = 12
   ): BillingPeriod[] => {
     if (!company) return [];
-    
+
     const periods: BillingPeriod[] = [];
     const now = new Date();
-    
+
     const defaultDiaInicio = diaInicio || 1;
     const defaultDiaFim = diaFim || 31;
 
     for (let i = startMonthOffset; i <= endMonthOffset; i++) {
       const baseMonth = startOfMonth(addMonths(now, i));
-      
+
       let inicio: Date;
       let fim: Date;
-      
+
       if (defaultDiaInicio > defaultDiaFim) {
         const inicioMonth = baseMonth;
-        inicio = setDate(inicioMonth, Math.min(defaultDiaInicio, endOfMonth(inicioMonth).getDate()));
+        inicio = setDate(
+          inicioMonth,
+          Math.min(defaultDiaInicio, endOfMonth(inicioMonth).getDate())
+        );
         const fimMonth = addMonths(baseMonth, 1);
-        fim = setDate(fimMonth, Math.min(defaultDiaFim, endOfMonth(fimMonth).getDate()));
+        fim = setDate(
+          fimMonth,
+          Math.min(defaultDiaFim, endOfMonth(fimMonth).getDate())
+        );
       } else {
-        inicio = setDate(baseMonth, Math.min(defaultDiaInicio, endOfMonth(baseMonth).getDate()));
-        fim = setDate(baseMonth, Math.min(defaultDiaFim, endOfMonth(baseMonth).getDate()));
+        inicio = setDate(
+          baseMonth,
+          Math.min(defaultDiaInicio, endOfMonth(baseMonth).getDate())
+        );
+        fim = setDate(
+          baseMonth,
+          Math.min(defaultDiaFim, endOfMonth(baseMonth).getDate())
+        );
       }
-      
+
       periods.push({
         inicio: format(inicio, "yyyy-MM-dd"),
         fim: format(fim, "yyyy-MM-dd"),
@@ -90,7 +121,7 @@ export default function MemberPaymentClosure({ sharedSelectedPeriod, onPeriodCha
         value: `${format(inicio, "yyyy-MM-dd")}_${format(fim, "yyyy-MM-dd")}`,
       });
     }
-    
+
     return periods;
   };
 
@@ -101,7 +132,7 @@ export default function MemberPaymentClosure({ sharedSelectedPeriod, onPeriodCha
       company.diaInicioFaturamento,
       company.diaFimFaturamento,
       -1, // 1 mês para trás
-      12  // 12 meses para frente
+      12 // 12 meses para frente
     );
   }, [company]);
 
@@ -125,14 +156,22 @@ export default function MemberPaymentClosure({ sharedSelectedPeriod, onPeriodCha
 
   // Definir período padrão: primeiro período (ordenado por data) que não esteja com status "pagamentos_realizados"
   useEffect(() => {
-    if (availablePeriods.length > 0 && !selectedPeriodValue && !sharedSelectedPeriod && company) {
+    if (
+      availablePeriods.length > 0 &&
+      !selectedPeriodValue &&
+      !sharedSelectedPeriod &&
+      company
+    ) {
       const findDefaultPeriod = async () => {
         try {
-          const allInvoices = await memberInvoiceService.findByCompanyId(company.id);
-          
+          const allInvoices = await memberInvoiceService.findByCompanyId(
+            company.id
+          );
+
           // Ordenar períodos por data (mais antigo primeiro)
-          const sortedPeriods = [...availablePeriods].sort((a, b) => 
-            new Date(a.inicio).getTime() - new Date(b.inicio).getTime()
+          const sortedPeriods = [...availablePeriods].sort(
+            (a, b) =>
+              new Date(a.inicio).getTime() - new Date(b.inicio).getTime()
           );
 
           // Encontrar o primeiro período que não está com status "pagamentos_realizados"
@@ -181,7 +220,7 @@ export default function MemberPaymentClosure({ sharedSelectedPeriod, onPeriodCha
 
   // Obter período selecionado
   const selectedPeriod = useMemo(() => {
-    return availablePeriods.find(p => p.value === selectedPeriodValue);
+    return availablePeriods.find((p) => p.value === selectedPeriodValue);
   }, [availablePeriods, selectedPeriodValue]);
 
   // Extrair dataInicio e dataFim do período selecionado
@@ -195,8 +234,10 @@ export default function MemberPaymentClosure({ sharedSelectedPeriod, onPeriodCha
     }
 
     try {
-      const allInvoices = await memberInvoiceService.findByCompanyId(company.id);
-      
+      const allInvoices = await memberInvoiceService.findByCompanyId(
+        company.id
+      );
+
       // Filtrar faturas do período selecionado
       const periodInvoices = allInvoices.filter(
         (inv) =>
@@ -211,15 +252,11 @@ export default function MemberPaymentClosure({ sharedSelectedPeriod, onPeriodCha
       }
 
       // Calcular status do período
-      const todasPagas = periodInvoices.every(
-        (inv) => inv.status === "pago"
-      );
+      const todasPagas = periodInvoices.every((inv) => inv.status === "pago");
       const todasGeradas = periodInvoices.every(
         (inv) => inv.status === "fatura_gerada"
       );
-      const temPagas = periodInvoices.some(
-        (inv) => inv.status === "pago"
-      );
+      const temPagas = periodInvoices.some((inv) => inv.status === "pago");
       const temPendentes = periodInvoices.some(
         (inv) => inv.status === "pendente" || inv.status === "fatura_gerada"
       );
@@ -281,7 +318,9 @@ export default function MemberPaymentClosure({ sharedSelectedPeriod, onPeriodCha
       );
 
       // Carregar faturas existentes do período
-      const allInvoices = await memberInvoiceService.findByCompanyId(company.id);
+      const allInvoices = await memberInvoiceService.findByCompanyId(
+        company.id
+      );
       const periodInvoices = allInvoices.filter(
         (inv) =>
           inv.periodoInicio === periodoInicio &&
@@ -414,11 +453,11 @@ export default function MemberPaymentClosure({ sharedSelectedPeriod, onPeriodCha
     } catch (error: any) {
       alert(error.message || "Erro ao salvar valor");
     } finally {
-      setSaving((prev => {
+      setSaving((prev) => {
         const newState = { ...prev };
         delete newState[member.id];
         return newState;
-      }));
+      });
     }
   };
 
@@ -461,7 +500,9 @@ export default function MemberPaymentClosure({ sharedSelectedPeriod, onPeriodCha
   if (loading) {
     return (
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-        <p className="text-gray-600 dark:text-gray-400">Carregando membros...</p>
+        <p className="text-gray-600 dark:text-gray-400">
+          Carregando membros...
+        </p>
       </div>
     );
   }
@@ -530,8 +571,10 @@ export default function MemberPaymentClosure({ sharedSelectedPeriod, onPeriodCha
   const handleGenerateInvoices = async () => {
     if (!company) return;
 
-    const selectedMembersList = members.filter((m) => selectedMembers.has(m.id));
-    
+    const selectedMembersList = members.filter((m) =>
+      selectedMembers.has(m.id)
+    );
+
     if (selectedMembersList.length === 0) {
       alert("Selecione pelo menos um membro");
       return;
@@ -539,9 +582,14 @@ export default function MemberPaymentClosure({ sharedSelectedPeriod, onPeriodCha
 
     // Verificar se já existem faturas para os membros selecionados no mesmo período
     try {
-      const existingInvoices = await memberInvoiceService.findByCompanyId(company.id);
-      const conflictingInvoices: Array<{ member: MemberWithData; invoice: any }> = [];
-      
+      const existingInvoices = await memberInvoiceService.findByCompanyId(
+        company.id
+      );
+      const conflictingInvoices: Array<{
+        member: MemberWithData;
+        invoice: any;
+      }> = [];
+
       for (const member of selectedMembersList) {
         const existingInvoice = existingInvoices.find(
           (inv) =>
@@ -550,18 +598,23 @@ export default function MemberPaymentClosure({ sharedSelectedPeriod, onPeriodCha
             inv.periodoFim === dataFim &&
             inv.status !== "cancelado"
         );
-        
+
         if (existingInvoice) {
           conflictingInvoices.push({ member, invoice: existingInvoice });
         }
       }
-      
+
       if (conflictingInvoices.length > 0) {
-        const membersList = conflictingInvoices.map((c) => c.member.user.name).join(", ");
+        const membersList = conflictingInvoices
+          .map((c) => c.member.user.name)
+          .join(", ");
         const message = `Os seguintes membros já possuem faturas geradas para este período (${format(new Date(dataInicio), "dd/MM/yyyy", { locale: ptBR })} a ${format(new Date(dataFim), "dd/MM/yyyy", { locale: ptBR })}):\n\n${membersList}\n\nDeseja cancelar as faturas existentes e gerar novas, ou deseja alterar o período?`;
-        
-        const userChoice = confirm(message + "\n\nClique OK para cancelar as faturas existentes e gerar novas.\nClique Cancelar para alterar o período manualmente.");
-        
+
+        const userChoice = confirm(
+          message +
+            "\n\nClique OK para cancelar as faturas existentes e gerar novas.\nClique Cancelar para alterar o período manualmente."
+        );
+
         if (userChoice) {
           // Cancelar faturas existentes
           for (const { invoice } of conflictingInvoices) {
@@ -602,10 +655,11 @@ export default function MemberPaymentClosure({ sharedSelectedPeriod, onPeriodCha
     try {
       for (const member of selectedMembersList) {
         // Usar valor editado se existir, senão calcular padrão
-        const valor = savedValues[member.id] !== undefined 
-          ? savedValues[member.id] 
-          : calculateDefaultValue(member);
-        
+        const valor =
+          savedValues[member.id] !== undefined
+            ? savedValues[member.id]
+            : calculateDefaultValue(member);
+
         if (valor <= 0) {
           continue; // Pular membros sem valor
         }
@@ -613,20 +667,22 @@ export default function MemberPaymentClosure({ sharedSelectedPeriod, onPeriodCha
         const titulo = `Fatura - ${member.user.name} - ${format(new Date(dataInicio), "dd/MM/yyyy", { locale: ptBR })} a ${format(new Date(dataFim), "dd/MM/yyyy", { locale: ptBR })}`;
 
         // Criar lembretes das etapas
-        const lembretes: Lembrete[] = etapas.map((etapa, index) => {
-          try {
-            const parsedDate = parse(etapa.data, "dd/MM/yyyy", new Date());
-            return {
-              id: `lemb_${Date.now()}_${index}_${Math.random().toString(36).substr(2, 9)}`,
-              faturaId: "", // Será preenchido após criar a fatura
-              titulo: etapa.nome,
-              data: format(parsedDate, "yyyy-MM-dd"),
-              concluido: false,
-            };
-          } catch {
-            return null;
-          }
-        }).filter((l): l is Lembrete => l !== null);
+        const lembretes: Lembrete[] = etapas
+          .map((etapa, index) => {
+            try {
+              const parsedDate = parse(etapa.data, "dd/MM/yyyy", new Date());
+              return {
+                id: `lemb_${Date.now()}_${index}_${Math.random().toString(36).substr(2, 9)}`,
+                faturaId: "", // Será preenchido após criar a fatura
+                titulo: etapa.nome,
+                data: format(parsedDate, "yyyy-MM-dd"),
+                concluido: false,
+              };
+            } catch {
+              return null;
+            }
+          })
+          .filter((l): l is Lembrete => l !== null);
 
         const createdInvoice = await memberInvoiceService.create({
           userId: member.userId,
@@ -638,8 +694,12 @@ export default function MemberPaymentClosure({ sharedSelectedPeriod, onPeriodCha
           periodoFim: dataFim,
           horasTrabalhadas: member.horasMesAtual,
           tipoCalculo: member.settings?.horista ? "horas" : "fixo",
-          valorPorHora: member.settings?.horista ? member.settings.valorHora : undefined,
-          valorFixo: !member.settings?.horista ? member.settings?.valorFixo : undefined,
+          valorPorHora: member.settings?.horista
+            ? member.settings.valorHora
+            : undefined,
+          valorFixo: !member.settings?.horista
+            ? member.settings?.valorFixo
+            : undefined,
           lembretes,
         });
 
@@ -670,14 +730,16 @@ export default function MemberPaymentClosure({ sharedSelectedPeriod, onPeriodCha
     }
 
     const confirmMessage = `Deseja marcar todas as faturas do período ${format(new Date(dataInicio), "dd/MM/yyyy", { locale: ptBR })} a ${format(new Date(dataFim), "dd/MM/yyyy", { locale: ptBR })} como pagas?`;
-    
+
     if (!confirm(confirmMessage)) {
       return;
     }
 
     try {
-      const allInvoices = await memberInvoiceService.findByCompanyId(company.id);
-      
+      const allInvoices = await memberInvoiceService.findByCompanyId(
+        company.id
+      );
+
       // Filtrar faturas do período selecionado que não estão canceladas
       const periodInvoices = allInvoices.filter(
         (inv) =>
@@ -728,23 +790,23 @@ export default function MemberPaymentClosure({ sharedSelectedPeriod, onPeriodCha
                 !periodStatus || periodStatus === "sem_faturas"
                   ? "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300"
                   : periodStatus === "pago"
-                  ? "bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300"
-                  : periodStatus === "fatura_gerada"
-                  ? "bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300"
-                  : periodStatus === "parcialmente_pago"
-                  ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-300"
-                  : "bg-orange-100 text-orange-800 dark:bg-orange-900/50 dark:text-orange-300"
+                    ? "bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300"
+                    : periodStatus === "fatura_gerada"
+                      ? "bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300"
+                      : periodStatus === "parcialmente_pago"
+                        ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-300"
+                        : "bg-orange-100 text-orange-800 dark:bg-orange-900/50 dark:text-orange-300"
               }`}
             >
               {!periodStatus || periodStatus === "sem_faturas"
                 ? "Sem Faturas"
                 : periodStatus === "pago"
-                ? "Pago"
-                : periodStatus === "fatura_gerada"
-                ? "Fatura Gerada"
-                : periodStatus === "parcialmente_pago"
-                ? "Parcialmente Pago"
-                : "Pendente"}
+                  ? "Pago"
+                  : periodStatus === "fatura_gerada"
+                    ? "Fatura Gerada"
+                    : periodStatus === "parcialmente_pago"
+                      ? "Parcialmente Pago"
+                      : "Pendente"}
             </span>
             {(!periodStatus || periodStatus === "sem_faturas") && (
               <button
@@ -764,7 +826,7 @@ export default function MemberPaymentClosure({ sharedSelectedPeriod, onPeriodCha
             )}
           </div>
         </div>
-        
+
         {/* Seleção de período de faturamento */}
         <div className="mt-4">
           <div>
@@ -785,7 +847,8 @@ export default function MemberPaymentClosure({ sharedSelectedPeriod, onPeriodCha
               </select>
             ) : (
               <p className="text-sm text-gray-500 dark:text-gray-400">
-                Configure o período de faturamento na página de detalhes da empresa
+                Configure o período de faturamento na página de detalhes da
+                empresa
               </p>
             )}
           </div>
@@ -896,19 +959,19 @@ export default function MemberPaymentClosure({ sharedSelectedPeriod, onPeriodCha
                           member.invoiceStatus === "pago"
                             ? "bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300"
                             : member.invoiceStatus === "fatura_gerada"
-                            ? "bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300"
-                            : member.invoiceStatus === "cancelado"
-                            ? "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300"
-                            : "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-300"
+                              ? "bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300"
+                              : member.invoiceStatus === "cancelado"
+                                ? "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300"
+                                : "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-300"
                         }`}
                       >
                         {member.invoiceStatus === "pago"
                           ? "Pago"
                           : member.invoiceStatus === "fatura_gerada"
-                          ? "Fatura Gerada"
-                          : member.invoiceStatus === "cancelado"
-                          ? "Cancelado"
-                          : "Pendente"}
+                            ? "Fatura Gerada"
+                            : member.invoiceStatus === "cancelado"
+                              ? "Cancelado"
+                              : "Pendente"}
                       </span>
                     ) : (
                       <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300">
@@ -968,8 +1031,18 @@ export default function MemberPaymentClosure({ sharedSelectedPeriod, onPeriodCha
                   onClick={() => setShowSummaryModal(false)}
                   className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
                 >
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  <svg
+                    className="w-6 h-6"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M6 18L18 6M6 6l12 12"
+                    />
                   </svg>
                 </button>
               </div>
@@ -987,7 +1060,9 @@ export default function MemberPaymentClosure({ sharedSelectedPeriod, onPeriodCha
                       Data de Início
                     </label>
                     <div className="px-3 py-2 bg-gray-50 dark:bg-gray-700 rounded-lg text-gray-900 dark:text-white">
-                      {format(new Date(dataInicio), "dd/MM/yyyy", { locale: ptBR })}
+                      {format(new Date(dataInicio), "dd/MM/yyyy", {
+                        locale: ptBR,
+                      })}
                     </div>
                   </div>
                   <div>
@@ -995,7 +1070,9 @@ export default function MemberPaymentClosure({ sharedSelectedPeriod, onPeriodCha
                       Data de Término
                     </label>
                     <div className="px-3 py-2 bg-gray-50 dark:bg-gray-700 rounded-lg text-gray-900 dark:text-white">
-                      {format(new Date(dataFim), "dd/MM/yyyy", { locale: ptBR })}
+                      {format(new Date(dataFim), "dd/MM/yyyy", {
+                        locale: ptBR,
+                      })}
                     </div>
                   </div>
                 </div>
@@ -1066,8 +1143,18 @@ export default function MemberPaymentClosure({ sharedSelectedPeriod, onPeriodCha
                         onClick={() => handleRemoveEtapa(index)}
                         className="text-red-600 hover:text-red-800 dark:text-red-400"
                       >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        <svg
+                          className="w-5 h-5"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M6 18L18 6M6 6l12 12"
+                          />
                         </svg>
                       </button>
                     </div>
@@ -1110,7 +1197,8 @@ export default function MemberPaymentClosure({ sharedSelectedPeriod, onPeriodCha
                   onClick={handleGenerateInvoices}
                   className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
                 >
-                  Gerar Faturas ({selectedMembers.size} {selectedMembers.size === 1 ? "membro" : "membros"})
+                  Gerar Faturas ({selectedMembers.size}{" "}
+                  {selectedMembers.size === 1 ? "membro" : "membros"})
                 </button>
               </div>
             </div>
@@ -1120,4 +1208,3 @@ export default function MemberPaymentClosure({ sharedSelectedPeriod, onPeriodCha
     </div>
   );
 }
-

@@ -35,10 +35,14 @@ export default function ProjetoDetalhesPage() {
   const [activityToDelete, setActivityToDelete] = useState<string | null>(null);
   const [isDeletingActivity, setIsDeletingActivity] = useState(false);
   const [hasAccess, setHasAccess] = useState<boolean | null>(null);
-  const [projectMembers, setProjectMembers] = useState<Array<{ id: string; name: string; email: string }>>([]);
+  const [projectMembers, setProjectMembers] = useState<
+    Array<{ id: string; name: string; email: string }>
+  >([]);
   const [loadingMembers, setLoadingMembers] = useState(true);
-  
-  const [activeTab, setActiveTab] = useState<'atividades' | 'financeiro'>('atividades');
+
+  const [activeTab, setActiveTab] = useState<"atividades" | "financeiro">(
+    "atividades"
+  );
 
   const projeto = getProjetoById(projetoId);
 
@@ -56,10 +60,14 @@ export default function ProjetoDetalhesPage() {
         const membersData = await Promise.all(
           members.map(async (pm) => {
             const user = await userService.findById(pm.userId);
-            return user ? { id: user.id, name: user.name, email: user.email } : null;
+            return user
+              ? { id: user.id, name: user.name, email: user.email }
+              : null;
           })
         );
-        const validMembers = membersData.filter((m): m is { id: string; name: string; email: string } => m !== null);
+        const validMembers = membersData.filter(
+          (m): m is { id: string; name: string; email: string } => m !== null
+        );
         setProjectMembers(validMembers);
       } catch (error) {
         console.error("Erro ao carregar membros do projeto:", error);
@@ -115,7 +123,9 @@ export default function ProjetoDetalhesPage() {
       <div className="flex h-full items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600 dark:text-gray-400">Verificando acesso...</p>
+          <p className="mt-4 text-gray-600 dark:text-gray-400">
+            Verificando acesso...
+          </p>
         </div>
       </div>
     );
@@ -126,7 +136,9 @@ export default function ProjetoDetalhesPage() {
       <div>
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-12 text-center">
           <p className="text-gray-600 dark:text-gray-400">
-            {!projeto ? "Projeto não encontrado" : "Você não tem acesso a este projeto"}
+            {!projeto
+              ? "Projeto não encontrado"
+              : "Você não tem acesso a este projeto"}
           </p>
           <Link
             href="/dashboard/projetos"
@@ -138,7 +150,6 @@ export default function ProjetoDetalhesPage() {
       </div>
     );
   }
-
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat("pt-BR", {
@@ -179,10 +190,14 @@ export default function ProjetoDetalhesPage() {
   const atividadesDoProjeto = atividades.filter(
     (a) => a.projetoId === projetoId
   );
-  
-  const faturasDoProjeto = faturas.filter(
-    (f) => f.projetoId === projetoId
-  ).sort((a, b) => new Date(a.dataVencimento).getTime() - new Date(b.dataVencimento).getTime());
+
+  const faturasDoProjeto = faturas
+    .filter((f) => f.projetoId === projetoId)
+    .sort(
+      (a, b) =>
+        new Date(a.dataVencimento).getTime() -
+        new Date(b.dataVencimento).getTime()
+    );
 
   const totalHorasEstimadas = atividadesDoProjeto.reduce(
     (sum, atividade) => sum + atividade.horasAtuacao,
@@ -195,8 +210,8 @@ export default function ProjetoDetalhesPage() {
   const totalCusto = atividadesDoProjeto.reduce((sum, atividade) => {
     return sum + atividade.custoTarefa;
   }, 0);
-  
-  const lucroAtualEstimado = 
+
+  const lucroAtualEstimado =
     projeto.tipoCobranca === "fixo"
       ? (projeto.valorFixo ?? 0)
       : totalHorasUtilizadas * (projeto.valorHora ?? 0);
@@ -204,10 +219,10 @@ export default function ProjetoDetalhesPage() {
   // Cálculos financeiros
   const totalFaturado = faturasDoProjeto.reduce((acc, f) => acc + f.valor, 0);
   const totalRecebido = faturasDoProjeto
-    .filter(f => f.status === 'pago')
+    .filter((f) => f.status === "pago")
     .reduce((acc, f) => acc + f.valor, 0);
   const totalPendente = faturasDoProjeto
-    .filter(f => f.status === 'pendente' || f.status === 'fatura_gerada')
+    .filter((f) => f.status === "pendente" || f.status === "fatura_gerada")
     .reduce((acc, f) => acc + f.valor, 0);
 
   return (
@@ -350,7 +365,8 @@ export default function ProjetoDetalhesPage() {
               Confirmar exclusão de atividade
             </h3>
             <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-              Tem certeza que deseja excluir esta atividade? Esta ação não pode ser desfeita.
+              Tem certeza que deseja excluir esta atividade? Esta ação não pode
+              ser desfeita.
             </p>
             <div className="flex items-center justify-end space-x-3">
               <button
@@ -376,13 +392,15 @@ export default function ProjetoDetalhesPage() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
           <p className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
-            {projeto.tipoCobranca === "fixo" ? "Valor do Projeto" : "Valor por Hora"}
+            {projeto.tipoCobranca === "fixo"
+              ? "Valor do Projeto"
+              : "Valor por Hora"}
           </p>
           <p className="text-2xl font-bold text-gray-900 dark:text-white">
             {formatCurrency(
-                  projeto.tipoCobranca === "fixo"
-                    ? projeto.valorFixo ?? 0
-                    : projeto.valorHora ?? 0
+              projeto.tipoCobranca === "fixo"
+                ? (projeto.valorFixo ?? 0)
+                : (projeto.valorHora ?? 0)
             )}
           </p>
         </div>
@@ -401,16 +419,17 @@ export default function ProjetoDetalhesPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <p className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
-                {projeto.tipoCobranca === "fixo" ? "Valor do Projeto" : "Lucro atual estimado"}
+                {projeto.tipoCobranca === "fixo"
+                  ? "Valor do Projeto"
+                  : "Lucro atual estimado"}
               </p>
               <p className="text-2xl font-bold text-gray-900 dark:text-white">
                 {formatCurrency(lucroAtualEstimado)}
               </p>
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                {projeto.tipoCobranca === "fixo" 
+                {projeto.tipoCobranca === "fixo"
                   ? "Valor fixo fechado"
-                  : `${totalHorasUtilizadas}h × ${formatCurrency(projeto.valorHora ?? 0)}/h`
-                }
+                  : `${totalHorasUtilizadas}h × ${formatCurrency(projeto.valorHora ?? 0)}/h`}
               </p>
             </div>
             <div className="sm:border-l sm:border-gray-200 sm:dark:border-gray-700 sm:pl-4">
@@ -687,7 +706,9 @@ export default function ProjetoDetalhesPage() {
                                 </svg>
                               </Link>
                               <button
-                                onClick={() => setActivityToDelete(atividade.id)}
+                                onClick={() =>
+                                  setActivityToDelete(atividade.id)
+                                }
                                 className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
                                 title="Excluir atividade"
                               >
@@ -719,78 +740,111 @@ export default function ProjetoDetalhesPage() {
       ) : (
         <div className="space-y-6">
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
-             <div className="p-6 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
-                <h3 className="text-lg font-medium text-gray-900 dark:text-white">Faturas do Projeto</h3>
-                <Link
-                  href="/dashboard/financeiro/novo"
-                  className="text-sm font-medium text-indigo-600 hover:text-indigo-500"
-                >
-                  Nova Fatura
-                </Link>
-             </div>
-             {faturasDoProjeto.length === 0 ? (
-               <div className="p-12 text-center">
-                 <p className="text-gray-500 dark:text-gray-400">Nenhuma fatura registrada para este projeto.</p>
-               </div>
-             ) : (
+            <div className="p-6 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white">
+                Faturas do Projeto
+              </h3>
+              <Link
+                href="/dashboard/financeiro/novo"
+                className="text-sm font-medium text-indigo-600 hover:text-indigo-500"
+              >
+                Nova Fatura
+              </Link>
+            </div>
+            {faturasDoProjeto.length === 0 ? (
+              <div className="p-12 text-center">
+                <p className="text-gray-500 dark:text-gray-400">
+                  Nenhuma fatura registrada para este projeto.
+                </p>
+              </div>
+            ) : (
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                   <thead className="bg-gray-50 dark:bg-gray-900">
                     <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Vencimento</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Título</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Valor</th>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Ações</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Status
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Vencimento
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Título
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Valor
+                      </th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Ações
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                     {faturasDoProjeto.map((fatura) => {
-                      const isLate = fatura.status !== 'pago' && fatura.status !== 'cancelado' && parseISO(fatura.dataVencimento) < new Date();
+                      const isLate =
+                        fatura.status !== "pago" &&
+                        fatura.status !== "cancelado" &&
+                        parseISO(fatura.dataVencimento) < new Date();
                       return (
-                      <tr key={fatura.id} className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span
+                        <tr
+                          key={fatura.id}
+                          className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                        >
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span
                               className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
                                 fatura.status === "pago"
                                   ? "bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300"
                                   : isLate
-                                  ? "bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300"
-                                  : fatura.status === "cancelado"
-                                  ? "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300"
-                                  : "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-300"
+                                    ? "bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300"
+                                    : fatura.status === "cancelado"
+                                      ? "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300"
+                                      : "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-300"
                               }`}
                             >
-                              {fatura.status === "pago" ? "Pago" : isLate ? "Atrasado" : fatura.status === "cancelado" ? "Cancelado" : "Pendente"}
+                              {fatura.status === "pago"
+                                ? "Pago"
+                                : isLate
+                                  ? "Atrasado"
+                                  : fatura.status === "cancelado"
+                                    ? "Cancelado"
+                                    : "Pendente"}
                             </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                          {formatDate(fatura.dataVencimento)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
-                          {fatura.titulo}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                          {formatCurrency(fatura.valor)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                           {fatura.status === 'pendente' || fatura.status === 'fatura_gerada' ? (
-                             <button
-                               onClick={() => updateFatura(fatura.id, { status: 'pago', dataPagamento: new Date().toISOString() })}
-                               className="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400"
-                             >
-                               Marcar Pago
-                             </button>
-                           ) : (
-                             <span className="text-gray-400">-</span>
-                           )}
-                        </td>
-                      </tr>
-                    );})}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                            {formatDate(fatura.dataVencimento)}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
+                            {fatura.titulo}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
+                            {formatCurrency(fatura.valor)}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                            {fatura.status === "pendente" ||
+                            fatura.status === "fatura_gerada" ? (
+                              <button
+                                onClick={() =>
+                                  updateFatura(fatura.id, {
+                                    status: "pago",
+                                    dataPagamento: new Date().toISOString(),
+                                  })
+                                }
+                                className="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400"
+                              >
+                                Marcar Pago
+                              </button>
+                            ) : (
+                              <span className="text-gray-400">-</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
-             )}
+            )}
           </div>
         </div>
       )}

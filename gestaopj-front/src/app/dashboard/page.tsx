@@ -10,7 +10,14 @@ import { useAtuacoes } from "@/contexts/AtuacaoContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCompany } from "@/contexts/CompanyContext";
 import { formatRelativeTime } from "@/utils/dashboardMetrics";
-import { format, parseISO, startOfMonth, addMonths, setDate, endOfMonth } from "date-fns";
+import {
+  format,
+  parseISO,
+  startOfMonth,
+  addMonths,
+  setDate,
+  endOfMonth,
+} from "date-fns";
 import { memberInvoiceService } from "@/services/memberInvoiceService";
 import { companyMembershipService } from "@/services/companyMembershipService";
 import { atuacaoService } from "@/services/atuacaoService";
@@ -176,30 +183,39 @@ export default function DashboardPage() {
   // Calcular período de faturamento baseado na configuração da empresa
   const billingPeriod = useMemo(() => {
     if (!company) return null;
-    
+
     const now = new Date();
     const diaInicio = company.diaInicioFaturamento || 1;
     const diaFim = company.diaFimFaturamento || 31;
-    
+
     let inicio: Date;
     let fim: Date;
-    
+
     // Se o dia de início é maior que o dia de fim, o período vai do dia início até o dia fim do mês seguinte
     if (diaInicio > diaFim) {
       // Início: dia de início no mês atual
       const inicioMonth = now;
-      inicio = setDate(inicioMonth, Math.min(diaInicio, endOfMonth(inicioMonth).getDate()));
-      
+      inicio = setDate(
+        inicioMonth,
+        Math.min(diaInicio, endOfMonth(inicioMonth).getDate())
+      );
+
       // Fim: dia de fim no mês seguinte
       const fimMonth = addMonths(now, 1);
       fim = setDate(fimMonth, Math.min(diaFim, endOfMonth(fimMonth).getDate()));
     } else {
       // Período dentro do mesmo mês
       const baseMonth = now;
-      inicio = setDate(baseMonth, Math.min(diaInicio, endOfMonth(baseMonth).getDate()));
-      fim = setDate(baseMonth, Math.min(diaFim, endOfMonth(baseMonth).getDate()));
+      inicio = setDate(
+        baseMonth,
+        Math.min(diaInicio, endOfMonth(baseMonth).getDate())
+      );
+      fim = setDate(
+        baseMonth,
+        Math.min(diaFim, endOfMonth(baseMonth).getDate())
+      );
     }
-    
+
     return {
       inicio: format(inicio, "yyyy-MM-dd"),
       fim: format(fim, "yyyy-MM-dd"),
@@ -209,7 +225,12 @@ export default function DashboardPage() {
   // Calcular métricas administrativas
   useEffect(() => {
     if (!isOwnerOrAdmin || !company) {
-      setAdminMetrics({ estimativaPagamentos: 0, totalAtuacoes: 0, membrosAtivos: 0, loading: false });
+      setAdminMetrics({
+        estimativaPagamentos: 0,
+        totalAtuacoes: 0,
+        membrosAtivos: 0,
+        loading: false,
+      });
       return;
     }
 
@@ -218,26 +239,34 @@ export default function DashboardPage() {
         setAdminMetrics((prev) => ({ ...prev, loading: true }));
 
         // Usar período de faturamento configurado ou padrão (primeiro e último dia do mês)
-        const firstDayOfPeriod = billingPeriod?.inicio || 
-          new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split("T")[0];
-        const lastDayOfPeriod = billingPeriod?.fim || 
-          new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).toISOString().split("T")[0];
+        const firstDayOfPeriod =
+          billingPeriod?.inicio ||
+          new Date(new Date().getFullYear(), new Date().getMonth(), 1)
+            .toISOString()
+            .split("T")[0];
+        const lastDayOfPeriod =
+          billingPeriod?.fim ||
+          new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0)
+            .toISOString()
+            .split("T")[0];
 
         // Calcular estimativa de pagamentos (períodos não pagos)
         // Agrupar faturas por período e calcular apenas para períodos não totalmente pagos
-        const memberInvoices = await memberInvoiceService.findByCompanyId(company.id);
-        
+        const memberInvoices = await memberInvoiceService.findByCompanyId(
+          company.id
+        );
+
         // Agrupar faturas por período
         const invoicesByPeriodMap = new Map<string, typeof memberInvoices>();
         memberInvoices.forEach((inv) => {
-          const periodoInicio = inv.periodoInicio.includes("T") 
-            ? inv.periodoInicio.split("T")[0] 
+          const periodoInicio = inv.periodoInicio.includes("T")
+            ? inv.periodoInicio.split("T")[0]
             : inv.periodoInicio;
-          const periodoFim = inv.periodoFim.includes("T") 
-            ? inv.periodoFim.split("T")[0] 
+          const periodoFim = inv.periodoFim.includes("T")
+            ? inv.periodoFim.split("T")[0]
             : inv.periodoFim;
           const key = `${periodoInicio}_${periodoFim}`;
-          
+
           if (!invoicesByPeriodMap.has(key)) {
             invoicesByPeriodMap.set(key, []);
           }
@@ -249,18 +278,17 @@ export default function DashboardPage() {
         invoicesByPeriodMap.forEach((invoices, key) => {
           // Verificar se o período está totalmente pago
           // Se todas as faturas estiverem pagas ou canceladas, o período está pago
-          const todasPagasOuCanceladas = invoices.length > 0 && 
-            invoices.every(inv => 
-              inv.status === "pago" || 
-              inv.status === "cancelado"
+          const todasPagasOuCanceladas =
+            invoices.length > 0 &&
+            invoices.every(
+              (inv) => inv.status === "pago" || inv.status === "cancelado"
             );
-          
+
           // Se o período não estiver totalmente pago, somar as faturas pendentes
           if (!todasPagasOuCanceladas) {
             const valorPendente = invoices
-              .filter(inv => 
-                inv.status !== "pago" && 
-                inv.status !== "cancelado"
+              .filter(
+                (inv) => inv.status !== "pago" && inv.status !== "cancelado"
               )
               .reduce((sum, inv) => sum + inv.valor, 0);
             estimativaPagamentos += valorPendente;
@@ -272,8 +300,8 @@ export default function DashboardPage() {
         const projetos = await projetoService.findAll(company.id);
         const projetosIds = new Set(projetos.map((p) => p.id));
         const atuacoesPeriodo = allAtuacoes.filter((a) => {
-          const dataAtuacao = a.data.includes("T") 
-            ? a.data.split("T")[0] 
+          const dataAtuacao = a.data.includes("T")
+            ? a.data.split("T")[0]
             : a.data;
           return (
             dataAtuacao >= firstDayOfPeriod &&
@@ -284,7 +312,9 @@ export default function DashboardPage() {
         const totalAtuacoes = atuacoesPeriodo.length;
 
         // Calcular membros ativos
-        const memberships = await companyMembershipService.findByCompanyId(company.id);
+        const memberships = await companyMembershipService.findByCompanyId(
+          company.id
+        );
         const membrosAtivos = memberships.filter((m) => m.active).length;
 
         setAdminMetrics({
@@ -295,7 +325,12 @@ export default function DashboardPage() {
         });
       } catch (error) {
         console.error("Erro ao carregar métricas administrativas:", error);
-        setAdminMetrics({ estimativaPagamentos: 0, totalAtuacoes: 0, membrosAtivos: 0, loading: false });
+        setAdminMetrics({
+          estimativaPagamentos: 0,
+          totalAtuacoes: 0,
+          membrosAtivos: 0,
+          loading: false,
+        });
       }
     };
 
@@ -341,8 +376,8 @@ export default function DashboardPage() {
           atividade.status === "concluida"
             ? "concluída"
             : atividade.status === "em_execucao"
-            ? "em execução"
-            : "criada";
+              ? "em execução"
+              : "criada";
         activities.push({
           id: `ativ_${atividade.id}`,
           type: "atividade",
@@ -368,9 +403,15 @@ export default function DashboardPage() {
 
     // Mapear status do projeto para categorias do resumo
     // Projetos sem status são tratados como "ativo" (padrão)
-    const projetosAtivos = projetosValidos.filter((p) => !p.status || p.status === "ativo");
-    const projetosPausados = projetosValidos.filter((p) => p.status === "pausado");
-    const projetosConcluidos = projetosValidos.filter((p) => p.status === "concluido");
+    const projetosAtivos = projetosValidos.filter(
+      (p) => !p.status || p.status === "ativo"
+    );
+    const projetosPausados = projetosValidos.filter(
+      (p) => p.status === "pausado"
+    );
+    const projetosConcluidos = projetosValidos.filter(
+      (p) => p.status === "concluido"
+    );
     // Projetos cancelados não aparecem no resumo
 
     const emAndamento = projetosAtivos.length;
@@ -383,8 +424,10 @@ export default function DashboardPage() {
       planejamento,
       concluidos,
       total,
-      emAndamentoPercent: total > 0 ? Math.round((emAndamento / total) * 100) : 0,
-      planejamentoPercent: total > 0 ? Math.round((planejamento / total) * 100) : 0,
+      emAndamentoPercent:
+        total > 0 ? Math.round((emAndamento / total) * 100) : 0,
+      planejamentoPercent:
+        total > 0 ? Math.round((planejamento / total) * 100) : 0,
       concluidosPercent: total > 0 ? Math.round((concluidos / total) * 100) : 0,
     };
   }, [projetos]);
@@ -401,7 +444,9 @@ export default function DashboardPage() {
           </p>
         </div>
         <div className="flex items-center justify-center py-12">
-          <div className="text-gray-500 dark:text-gray-400">Carregando dados...</div>
+          <div className="text-gray-500 dark:text-gray-400">
+            Carregando dados...
+          </div>
         </div>
       </div>
     );
@@ -434,7 +479,8 @@ export default function DashboardPage() {
               Comece criando seu primeiro projeto
             </h2>
             <p className="text-gray-600 dark:text-gray-400 mb-6">
-              Crie um projeto para começar a gerenciar suas atividades e acompanhar seu trabalho.
+              Crie um projeto para começar a gerenciar suas atividades e
+              acompanhar seu trabalho.
             </p>
             <Link
               href="/dashboard/projetos/novo"
@@ -459,320 +505,348 @@ export default function DashboardPage() {
         </div>
       )}
 
-      <div className={hasNoProjects ? "blur-sm pointer-events-none space-y-6" : "space-y-6"}>
+      <div
+        className={
+          hasNoProjects ? "blur-sm pointer-events-none space-y-6" : "space-y-6"
+        }
+      >
         {/* Header da página */}
         <div>
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
             {isOwnerOrAdmin ? "Dashboard da Empresa" : "Meu Dashboard"}
           </h1>
           <p className="mt-2 text-gray-600 dark:text-gray-400">
-            {isOwnerOrAdmin 
+            {isOwnerOrAdmin
               ? "Visão geral das métricas e atividades da empresa"
               : "Visão geral da sua atividade como PJ"}
           </p>
         </div>
 
         {/* Cards de estatísticas */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {isOwnerOrAdmin ? (
-          // Cards para Admin/Owner
-          <>
-            <StatCard
-              title="Projetos Ativos"
-              value={projetos.filter((p) => !p.status || p.status === "ativo").length}
-              icon={icons.projetosAtivos}
-              iconBgColor="bg-green-500"
-            />
-            <StatCard
-              title="Estimativa de Pagamentos (Períodos Não Pagos)"
-              value={
-                adminMetrics.loading
-                  ? "Carregando..."
-                  : new Intl.NumberFormat("pt-BR", {
-                      style: "currency",
-                      currency: "BRL",
-                    }).format(adminMetrics.estimativaPagamentos)
-              }
-              icon={icons.estimativaPagamentos}
-              iconBgColor="bg-yellow-500"
-            />
-            <StatCard
-              title="Registros de Atuações (Mês)"
-              value={
-                adminMetrics.loading ? "Carregando..." : adminMetrics.totalAtuacoes.toString()
-              }
-              icon={icons.totalAtuacoes}
-              iconBgColor="bg-blue-500"
-            />
-            <StatCard
-              title="Membros Ativos"
-              value={
-                adminMetrics.loading ? "Carregando..." : adminMetrics.membrosAtivos.toString()
-              }
-              icon={icons.membrosAtivos}
-              iconBgColor="bg-purple-500"
-            />
-          </>
-        ) : (
-          // Cards para Membros (dashboard atual)
-          <>
-            <StatCard
-              title="Projetos Ativos"
-              value={metrics.projetosAtivos.value}
-              change={metrics.projetosAtivos.change}
-              icon={icons.projetosAtivos}
-              iconBgColor="bg-green-500"
-            />
-            <StatCard
-              title="Horas Trabalhadas (Mês)"
-              value={metrics.horasTotais.value}
-              change={metrics.horasTotais.change}
-              icon={icons.horasTotais}
-              iconBgColor="bg-blue-500"
-            />
-            <StatCard
-              title="Receita Total (Mês)"
-              value={metrics.receitaTotal.value}
-              change={metrics.receitaTotal.change}
-              icon={icons.receitaTotal}
-              iconBgColor="bg-yellow-500"
-            />
-            <StatCard
-              title="Média por Hora"
-              value={metrics.receitaHora.value}
-              change={metrics.receitaHora.change}
-              icon={icons.receitaHora}
-              iconBgColor="bg-indigo-500"
-            />
-            <StatCard
-              title="Projetos Novos (Mês)"
-              value={metrics.projetosNovos.value}
-              change={metrics.projetosNovos.change}
-              icon={icons.projetosNovos}
-              iconBgColor="bg-purple-500"
-            />
-          </>
-        )}
-      </div>
-
-      {/* Seção de ações rápidas */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-        <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
-          Ações Rápidas
-        </h2>
-        <div className={`grid grid-cols-1 ${isOwnerOrAdmin ? "md:grid-cols-3" : "md:grid-cols-1"} gap-4`}>
-          <Link
-            href="/dashboard/atuacao/novo"
-            className="flex items-center space-x-3 p-4 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-          >
-            <div className="bg-indigo-100 dark:bg-indigo-900/50 rounded-lg p-3">
-              <svg
-                className="w-6 h-6 text-indigo-600 dark:text-indigo-400"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 6v6m0 0v6m0-6h6m-6 0H6"
-                />
-              </svg>
-            </div>
-            <div>
-              <p className="font-medium text-gray-900 dark:text-white">
-                Registrar Atuação
-              </p>
-              <p className="text-sm text-gray-500 dark:text-gray-400">
-                Registrar atividades realizadas
-              </p>
-            </div>
-          </Link>
-
-          {isOwnerOrAdmin && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {isOwnerOrAdmin ? (
+            // Cards para Admin/Owner
             <>
-              <Link
-                href="/dashboard/projetos/novo"
-                className="flex items-center space-x-3 p-4 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-              >
-                <div className="bg-green-100 dark:bg-green-900/50 rounded-lg p-3">
-                  <svg
-                    className="w-6 h-6 text-green-600 dark:text-green-400"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M12 4v16m8-8H4"
-                    />
-                  </svg>
-                </div>
-                <div>
-                  <p className="font-medium text-gray-900 dark:text-white">
-                    Novo Projeto
-                  </p>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">
-                    Criar novo projeto
-                  </p>
-                </div>
-              </Link>
-
-              <Link
-                href="/dashboard/orcamentos"
-                className="flex items-center space-x-3 p-4 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-              >
-                <div className="bg-blue-100 dark:bg-blue-900/50 rounded-lg p-3">
-                  <svg
-                    className="w-6 h-6 text-blue-600 dark:text-blue-400"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
-                    />
-                  </svg>
-                </div>
-                <div>
-                  <p className="font-medium text-gray-900 dark:text-white">
-                    Orçamentos
-                  </p>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">
-                    Criar e exportar orçamentos
-                  </p>
-                </div>
-              </Link>
+              <StatCard
+                title="Projetos Ativos"
+                value={
+                  projetos.filter((p) => !p.status || p.status === "ativo")
+                    .length
+                }
+                icon={icons.projetosAtivos}
+                iconBgColor="bg-green-500"
+              />
+              <StatCard
+                title="Estimativa de Pagamentos (Períodos Não Pagos)"
+                value={
+                  adminMetrics.loading
+                    ? "Carregando..."
+                    : new Intl.NumberFormat("pt-BR", {
+                        style: "currency",
+                        currency: "BRL",
+                      }).format(adminMetrics.estimativaPagamentos)
+                }
+                icon={icons.estimativaPagamentos}
+                iconBgColor="bg-yellow-500"
+              />
+              <StatCard
+                title="Registros de Atuações (Mês)"
+                value={
+                  adminMetrics.loading
+                    ? "Carregando..."
+                    : adminMetrics.totalAtuacoes.toString()
+                }
+                icon={icons.totalAtuacoes}
+                iconBgColor="bg-blue-500"
+              />
+              <StatCard
+                title="Membros Ativos"
+                value={
+                  adminMetrics.loading
+                    ? "Carregando..."
+                    : adminMetrics.membrosAtivos.toString()
+                }
+                icon={icons.membrosAtivos}
+                iconBgColor="bg-purple-500"
+              />
+            </>
+          ) : (
+            // Cards para Membros (dashboard atual)
+            <>
+              <StatCard
+                title="Projetos Ativos"
+                value={metrics.projetosAtivos.value}
+                change={metrics.projetosAtivos.change}
+                icon={icons.projetosAtivos}
+                iconBgColor="bg-green-500"
+              />
+              <StatCard
+                title="Horas Trabalhadas (Mês)"
+                value={metrics.horasTotais.value}
+                change={metrics.horasTotais.change}
+                icon={icons.horasTotais}
+                iconBgColor="bg-blue-500"
+              />
+              <StatCard
+                title="Receita Total (Mês)"
+                value={metrics.receitaTotal.value}
+                change={metrics.receitaTotal.change}
+                icon={icons.receitaTotal}
+                iconBgColor="bg-yellow-500"
+              />
+              <StatCard
+                title="Média por Hora"
+                value={metrics.receitaHora.value}
+                change={metrics.receitaHora.change}
+                icon={icons.receitaHora}
+                iconBgColor="bg-indigo-500"
+              />
+              <StatCard
+                title="Projetos Novos (Mês)"
+                value={metrics.projetosNovos.value}
+                change={metrics.projetosNovos.change}
+                icon={icons.projetosNovos}
+                iconBgColor="bg-purple-500"
+              />
             </>
           )}
         </div>
-      </div>
 
-      {/* Atividades recentes e resumo */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Atividades Recentes */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-              Atividades Recentes
-            </h2>
-          </div>
-          <div className="space-y-4">
-            {recentActivities.length === 0 ? (
-              <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                <p>Nenhuma atividade recente</p>
-              </div>
-            ) : (
-              recentActivities.map((activity) => (
-                <div
-                  key={activity.id}
-                  className="flex items-start space-x-3 pb-4 border-b border-gray-200 dark:border-gray-700 last:border-0 last:pb-0"
-                >
-                  <div className="flex-shrink-0 mt-1">
-                    <div className="h-2 w-2 rounded-full bg-indigo-500"></div>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    {activity.href ? (
-                      <Link
-                        href={activity.href}
-                        className="text-sm text-gray-900 dark:text-white hover:text-indigo-600 dark:hover:text-indigo-400"
-                      >
-                        {activity.message}
-                      </Link>
-                    ) : (
-                      <p className="text-sm text-gray-900 dark:text-white">
-                        {activity.message}
-                      </p>
-                    )}
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                      {activity.time}
-                    </p>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-
-        {/* Resumo de Projetos */}
+        {/* Seção de ações rápidas */}
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
           <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
-            Resumo de Projetos
+            Ações Rápidas
           </h2>
-          <div className="space-y-4">
-            {projectSummary.total === 0 ? (
-              <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                <p>Nenhum projeto cadastrado</p>
+          <div
+            className={`grid grid-cols-1 ${isOwnerOrAdmin ? "md:grid-cols-3" : "md:grid-cols-1"} gap-4`}
+          >
+            <Link
+              href="/dashboard/atuacao/novo"
+              className="flex items-center space-x-3 p-4 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+            >
+              <div className="bg-indigo-100 dark:bg-indigo-900/50 rounded-lg p-3">
+                <svg
+                  className="w-6 h-6 text-indigo-600 dark:text-indigo-400"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 6v6m0 0v6m0-6h6m-6 0H6"
+                  />
+                </svg>
               </div>
-            ) : (
+              <div>
+                <p className="font-medium text-gray-900 dark:text-white">
+                  Registrar Atuação
+                </p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  Registrar atividades realizadas
+                </p>
+              </div>
+            </Link>
+
+            {isOwnerOrAdmin && (
               <>
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                      Em andamento
-                    </span>
-                    <span className="text-sm font-semibold text-gray-900 dark:text-white">
-                      {projectSummary.emAndamento} {projectSummary.emAndamento === 1 ? "projeto" : "projetos"}
-                    </span>
+                <Link
+                  href="/dashboard/projetos/novo"
+                  className="flex items-center space-x-3 p-4 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                >
+                  <div className="bg-green-100 dark:bg-green-900/50 rounded-lg p-3">
+                    <svg
+                      className="w-6 h-6 text-green-600 dark:text-green-400"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M12 4v16m8-8H4"
+                      />
+                    </svg>
                   </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2 dark:bg-gray-700">
-                    <div
-                      className="bg-indigo-600 h-2 rounded-full transition-all"
-                      style={{ width: `${projectSummary.emAndamentoPercent}%` }}
-                    ></div>
+                  <div>
+                    <p className="font-medium text-gray-900 dark:text-white">
+                      Novo Projeto
+                    </p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      Criar novo projeto
+                    </p>
                   </div>
-                </div>
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                      Planejamento
-                    </span>
-                    <span className="text-sm font-semibold text-gray-900 dark:text-white">
-                      {projectSummary.planejamento} {projectSummary.planejamento === 1 ? "projeto" : "projetos"}
-                    </span>
+                </Link>
+
+                <Link
+                  href="/dashboard/orcamentos"
+                  className="flex items-center space-x-3 p-4 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                >
+                  <div className="bg-blue-100 dark:bg-blue-900/50 rounded-lg p-3">
+                    <svg
+                      className="w-6 h-6 text-blue-600 dark:text-blue-400"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+                      />
+                    </svg>
                   </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2 dark:bg-gray-700">
-                    <div
-                      className="bg-yellow-500 h-2 rounded-full transition-all"
-                      style={{ width: `${projectSummary.planejamentoPercent}%` }}
-                    ></div>
+                  <div>
+                    <p className="font-medium text-gray-900 dark:text-white">
+                      Orçamentos
+                    </p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      Criar e exportar orçamentos
+                    </p>
                   </div>
-                </div>
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                      Concluídos
-                    </span>
-                    <span className="text-sm font-semibold text-gray-900 dark:text-white">
-                      {projectSummary.concluidos} {projectSummary.concluidos === 1 ? "projeto" : "projetos"}
-                    </span>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2 dark:bg-gray-700">
-                    <div
-                      className="bg-green-500 h-2 rounded-full transition-all"
-                      style={{ width: `${projectSummary.concluidosPercent}%` }}
-                    ></div>
-                  </div>
-                </div>
-                <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
-                  <Link
-                    href="/dashboard/projetos"
-                    className="text-sm font-medium text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300"
-                  >
-                    Ver meus projetos →
-                  </Link>
-                </div>
+                </Link>
               </>
             )}
           </div>
         </div>
-      </div>
+
+        {/* Atividades recentes e resumo */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Atividades Recentes */}
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+                Atividades Recentes
+              </h2>
+            </div>
+            <div className="space-y-4">
+              {recentActivities.length === 0 ? (
+                <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                  <p>Nenhuma atividade recente</p>
+                </div>
+              ) : (
+                recentActivities.map((activity) => (
+                  <div
+                    key={activity.id}
+                    className="flex items-start space-x-3 pb-4 border-b border-gray-200 dark:border-gray-700 last:border-0 last:pb-0"
+                  >
+                    <div className="flex-shrink-0 mt-1">
+                      <div className="h-2 w-2 rounded-full bg-indigo-500"></div>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      {activity.href ? (
+                        <Link
+                          href={activity.href}
+                          className="text-sm text-gray-900 dark:text-white hover:text-indigo-600 dark:hover:text-indigo-400"
+                        >
+                          {activity.message}
+                        </Link>
+                      ) : (
+                        <p className="text-sm text-gray-900 dark:text-white">
+                          {activity.message}
+                        </p>
+                      )}
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        {activity.time}
+                      </p>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* Resumo de Projetos */}
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
+              Resumo de Projetos
+            </h2>
+            <div className="space-y-4">
+              {projectSummary.total === 0 ? (
+                <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                  <p>Nenhum projeto cadastrado</p>
+                </div>
+              ) : (
+                <>
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                        Em andamento
+                      </span>
+                      <span className="text-sm font-semibold text-gray-900 dark:text-white">
+                        {projectSummary.emAndamento}{" "}
+                        {projectSummary.emAndamento === 1
+                          ? "projeto"
+                          : "projetos"}
+                      </span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2 dark:bg-gray-700">
+                      <div
+                        className="bg-indigo-600 h-2 rounded-full transition-all"
+                        style={{
+                          width: `${projectSummary.emAndamentoPercent}%`,
+                        }}
+                      ></div>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                        Planejamento
+                      </span>
+                      <span className="text-sm font-semibold text-gray-900 dark:text-white">
+                        {projectSummary.planejamento}{" "}
+                        {projectSummary.planejamento === 1
+                          ? "projeto"
+                          : "projetos"}
+                      </span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2 dark:bg-gray-700">
+                      <div
+                        className="bg-yellow-500 h-2 rounded-full transition-all"
+                        style={{
+                          width: `${projectSummary.planejamentoPercent}%`,
+                        }}
+                      ></div>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                        Concluídos
+                      </span>
+                      <span className="text-sm font-semibold text-gray-900 dark:text-white">
+                        {projectSummary.concluidos}{" "}
+                        {projectSummary.concluidos === 1
+                          ? "projeto"
+                          : "projetos"}
+                      </span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2 dark:bg-gray-700">
+                      <div
+                        className="bg-green-500 h-2 rounded-full transition-all"
+                        style={{
+                          width: `${projectSummary.concluidosPercent}%`,
+                        }}
+                      ></div>
+                    </div>
+                  </div>
+                  <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
+                    <Link
+                      href="/dashboard/projetos"
+                      className="text-sm font-medium text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300"
+                    >
+                      Ver meus projetos →
+                    </Link>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
