@@ -311,9 +311,11 @@ export default function MemberInvoicesDetailPage() {
     return invoices.some((inv) => inv.status === "fatura_gerada");
   }, [invoices]);
 
-  // IDs dos membros que já têm fatura neste período
+  // IDs dos membros que já têm fatura neste período (excluindo canceladas)
   const existingMemberIds = useMemo(() => {
-    return invoices.map((inv) => inv.userId);
+    return invoices
+      .filter((inv) => inv.status !== "cancelado")
+      .map((inv) => inv.userId);
   }, [invoices]);
 
   if (loading) {
