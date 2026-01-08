@@ -95,9 +95,13 @@ function toRows(params: {
   return params.atuacoes.map((a, index) => {
     // Verificar se é atividade avulsa
     const isAtividadeAvulsa = a.atividadeId.startsWith("__ATIVIDADE_AVULSA__");
+    const tituloAvulsa = a.tituloAvulsa || "(Atividade avulsa)";
     const atividadeNome = isAtividadeAvulsa 
-      ? (a.tituloAvulsa || "(Avulsa)")
+      ? `[ ! ] - ${tituloAvulsa}`
       : (params.atividadeTitleById.get(a.atividadeId) ?? "");
+    
+    // HD sempre 0 para atividade avulsa, caso contrário usa o valor do map
+    const hd = isAtividadeAvulsa ? 0 : (params.hdByAtuacaoId?.get(a.id) ?? 0);
     
     return {
       numero: index + 1,
@@ -113,7 +117,7 @@ function toRows(params: {
         statusLabel[
           (a.statusAtividadeNoRegistro ?? "pendente") as StatusAtividade
         ],
-      hd: params.hdByAtuacaoId?.get(a.id) ?? 0,
+      hd,
       hu: a.horasUtilizadas,
       descricao: a.descricao ?? "",
       impacto: a.impactoGerado ?? "",
@@ -341,8 +345,9 @@ export async function exportAtuacoesToPdf(params: {
         params.projetoTitleById.get(atuacao.projetoId) ||
         "Projeto não encontrado";
       const isAtividadeAvulsa = atuacao.atividadeId.startsWith("__ATIVIDADE_AVULSA__");
+      const tituloAvulsa = atuacao.tituloAvulsa || "(Atividade avulsa)";
       const atividadeNome = isAtividadeAvulsa
-        ? (atuacao.tituloAvulsa || "(Avulsa)")
+        ? `[ ! ] - ${tituloAvulsa}`
         : (params.atividadeTitleById.get(atuacao.atividadeId) || "Atividade não encontrada");
       const dataFormatada = formatDateBR(atuacao.data, {
         formatoData: params.formatoData,

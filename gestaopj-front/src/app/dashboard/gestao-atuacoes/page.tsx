@@ -142,9 +142,21 @@ export default function GestaoAtuacoesPage() {
     const result = new Map<string, number>();
 
     for (const a of sorted) {
+      const isAtividadeAvulsa = a.atividadeId.startsWith("__ATIVIDADE_AVULSA__");
+      
+      // HD sempre 0 para atividade avulsa - não calcula e não acumula
+      if (isAtividadeAvulsa) {
+        result.set(a.id, 0);
+        continue; // Não acumula horas para atividade avulsa e pula para próxima iteração
+      }
+      
+      // Para atividades normais, calcula o HD normalmente
       const acumulado = acumuladoPorAtividade.get(a.atividadeId) ?? 0;
       const he = (a as any).horasEstimadasNoRegistro ?? 0;
-      result.set(a.id, he - acumulado);
+      const hd = Math.max(0, he - acumulado); // Garante que HD nunca seja negativo
+      result.set(a.id, hd);
+      
+      // Acumula horas utilizadas para a próxima iteração (apenas para atividades normais)
       acumuladoPorAtividade.set(a.atividadeId, acumulado + (a.horasUtilizadas ?? 0));
     }
 
@@ -196,10 +208,12 @@ export default function GestaoAtuacoesPage() {
         const [ano, mes] = chave.split("-").map(Number);
         const data = new Date(ano, mes - 1, 1);
         const nomeMes = data.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+        const totalHorasUtilizadas = atuacoes.reduce((acc, a) => acc + (a.horasUtilizadas ?? 0), 0);
         return {
           chave,
           mesAno: nomeMes.charAt(0).toUpperCase() + nomeMes.slice(1),
           atuacoes,
+          totalHorasUtilizadas,
         };
       });
   }, [filteredAtuacoes]);
@@ -365,12 +379,19 @@ export default function GestaoAtuacoesPage() {
             >
               {/* Cabeçalho do mês/ano */}
               <div className="bg-gray-50 dark:bg-gray-900 px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-                  {grupo.mesAno}
-                </h2>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                  {grupo.atuacoes.length} {grupo.atuacoes.length === 1 ? "atuação" : "atuações"}
-                </p>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+                      {grupo.mesAno}
+                    </h2>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                      {grupo.atuacoes.length} {grupo.atuacoes.length === 1 ? "atuação" : "atuações"}
+                    </p>
+                  </div>
+                  <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    {grupo.totalHorasUtilizadas}h reportadas
+                  </p>
+                </div>
               </div>
 
               {/* Tabela de atuações do mês */}
@@ -457,14 +478,16 @@ export default function GestaoAtuacoesPage() {
                   <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                     {grupo.atuacoes.map((a) => {
                       const isAtividadeAvulsa = a.atividadeId.startsWith("__ATIVIDADE_AVULSA__");
+                      const tituloAvulsa = a.tituloAvulsa || "(Atividade avulsa)";
                       const tituloAtividade = isAtividadeAvulsa 
-                        ? (a.tituloAvulsa || "(Atividade avulsa)")
+                        ? `[ ! ] - ${tituloAvulsa}`
                         : (atividadesById.get(a.atividadeId) ?? "Atividade removida");
                       const projeto = projetosById.get(a.projetoId);
                       const nomeProjeto = projeto?.titulo ?? "Projeto removido";
                       const nomeEmpresa = projeto?.empresa ?? "Empresa não informada";
                       const user = a.userId ? users.get(a.userId) : null;
                       const userName = user?.name || "Não informado";
+                      const hd = isAtividadeAvulsa ? 0 : (hdByAtuacaoId.get(a.id) ?? 0);
 
                       return (
                         <tr 
@@ -507,7 +530,7 @@ export default function GestaoAtuacoesPage() {
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="text-sm text-gray-900 dark:text-white">
-                              {(hdByAtuacaoId.get(a.id) ?? 0).toFixed(2)}h
+                              {isAtividadeAvulsa ? "0h" : `${hd.toFixed(2)}h`}
                             </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
@@ -685,13 +708,14 @@ export default function GestaoAtuacoesPage() {
         if (!atuacao) return null;
         
         const isAtividadeAvulsa = atuacao.atividadeId.startsWith("__ATIVIDADE_AVULSA__");
+        const tituloAvulsa = atuacao.tituloAvulsa || "(Atividade avulsa)";
         const tituloAtividade = isAtividadeAvulsa 
-          ? (atuacao.tituloAvulsa || "(Atividade avulsa)")
+          ? `[ ! ] - ${tituloAvulsa}`
           : (atividadesById.get(atuacao.atividadeId) ?? "Atividade removida");
         const projeto = projetosById.get(atuacao.projetoId);
         const nomeProjeto = projeto?.titulo ?? "Projeto removido";
         const nomeEmpresa = projeto?.empresa ?? "Empresa não informada";
-        const hd = hdByAtuacaoId.get(atuacao.id) ?? 0;
+        const hd = isAtividadeAvulsa ? 0 : (hdByAtuacaoId.get(atuacao.id) ?? 0);
         const user = atuacao.userId ? users.get(atuacao.userId) : null;
         const userName = user?.name || "Não informado";
 

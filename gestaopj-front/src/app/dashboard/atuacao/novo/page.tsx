@@ -72,8 +72,8 @@ export default function NovaAtuacaoPage() {
     const atividadeAvulsa = todas.find((a) => a.id.startsWith("__ATIVIDADE_AVULSA__"));
     const outras = todas.filter((a) => a.status !== "concluida" && !a.id.startsWith("__ATIVIDADE_AVULSA__"));
     
-    // Atividade avulsa sempre aparece no final
-    return atividadeAvulsa ? [...outras, atividadeAvulsa] : outras;
+    // Atividade avulsa sempre aparece no início
+    return atividadeAvulsa ? [atividadeAvulsa, ...outras] : outras;
   }, [formData.projetoId, getAtividadesByProjeto]);
 
   const atividadesOrdenadas = useMemo(() => {
@@ -95,8 +95,8 @@ export default function NovaAtuacaoPage() {
       return a.titulo.localeCompare(b.titulo, "pt-BR");
     });
 
-    // Atividade avulsa sempre no final
-    return atividadeAvulsa ? [...outrasOrdenadas, atividadeAvulsa] : outrasOrdenadas;
+    // Atividade avulsa sempre no início
+    return atividadeAvulsa ? [atividadeAvulsa, ...outrasOrdenadas] : outrasOrdenadas;
   }, [atividadesDoProjeto]);
 
   const atividadeSelecionada = useMemo(() => {

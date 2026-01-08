@@ -76,9 +76,21 @@ export default function AtuacaoPage() {
     const result = new Map<string, number>();
 
     for (const a of sorted) {
+      const isAtividadeAvulsa = a.atividadeId.startsWith("__ATIVIDADE_AVULSA__");
+      
+      // HD sempre 0 para atividade avulsa - não calcula e não acumula
+      if (isAtividadeAvulsa) {
+        result.set(a.id, 0);
+        continue; // Não acumula horas para atividade avulsa e pula para próxima iteração
+      }
+      
+      // Para atividades normais, calcula o HD normalmente
       const acumulado = acumuladoPorAtividade.get(a.atividadeId) ?? 0;
       const he = (a as any).horasEstimadasNoRegistro ?? 0;
-      result.set(a.id, he - acumulado);
+      const hd = Math.max(0, he - acumulado); // Garante que HD nunca seja negativo
+      result.set(a.id, hd);
+      
+      // Acumula horas utilizadas para a próxima iteração (apenas para atividades normais)
       acumuladoPorAtividade.set(a.atividadeId, acumulado + (a.horasUtilizadas ?? 0));
     }
 
@@ -124,10 +136,15 @@ export default function AtuacaoPage() {
         const [ano, mes] = chave.split("-").map(Number);
         const data = new Date(ano, mes - 1, 1);
         const nomeMes = data.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+        
+        // Calcular total de horas utilizadas do mês
+        const totalHorasUtilizadas = atuacoes.reduce((sum, atuacao) => sum + atuacao.horasUtilizadas, 0);
+        
         return {
           chave,
           mesAno: nomeMes.charAt(0).toUpperCase() + nomeMes.slice(1),
           atuacoes,
+          totalHorasUtilizadas,
         };
       });
   }, [filteredAtuacoes]);
@@ -285,12 +302,21 @@ export default function AtuacaoPage() {
             >
               {/* Cabeçalho do mês/ano */}
               <div className="bg-gray-50 dark:bg-gray-900 px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-                  {grupo.mesAno}
-                </h2>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                  {grupo.atuacoes.length} {grupo.atuacoes.length === 1 ? "atuação" : "atuações"}
-                </p>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+                      {grupo.mesAno}
+                    </h2>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                      {grupo.atuacoes.length} {grupo.atuacoes.length === 1 ? "atuação" : "atuações"}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                      {grupo.totalHorasUtilizadas}h reportadas
+                    </p>
+                  </div>
+                </div>
               </div>
 
               {/* Tabela de atuações do mês */}
@@ -378,7 +404,7 @@ export default function AtuacaoPage() {
                     {grupo.atuacoes.map((a) => {
                       const isAtividadeAvulsa = a.atividadeId.startsWith("__ATIVIDADE_AVULSA__");
                       const tituloAtividade = isAtividadeAvulsa 
-                        ? (a.tituloAvulsa || "(Atividade avulsa)")
+                        ? `[ ! ] - ${a.tituloAvulsa || "Atividade avulsa"}`
                         : (atividadesById.get(a.atividadeId) ?? "Atividade removida");
                       const projeto = projetosById.get(a.projetoId);
                       const nomeProjeto = projeto?.titulo ?? "Projeto removido";
@@ -415,7 +441,14 @@ export default function AtuacaoPage() {
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="text-sm text-gray-900 dark:text-white">
-                              {(hdByAtuacaoId.get(a.id) ?? 0).toFixed(2)}h
+                              {(() => {
+                                // HD sempre 0 para atividade avulsa
+                                if (isAtividadeAvulsa) {
+                                  return "0h";
+                                }
+                                const hd = hdByAtuacaoId.get(a.id) ?? 0;
+                                return `${hd.toFixed(2)}h`;
+                              })()}
                             </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
@@ -623,12 +656,13 @@ export default function AtuacaoPage() {
         
         const isAtividadeAvulsa = atuacao.atividadeId.startsWith("__ATIVIDADE_AVULSA__");
         const tituloAtividade = isAtividadeAvulsa 
-          ? (atuacao.tituloAvulsa || "(Atividade avulsa)")
+          ? `[ ! ] - ${atuacao.tituloAvulsa || "Atividade avulsa"}`
           : (atividadesById.get(atuacao.atividadeId) ?? "Atividade removida");
         const projeto = projetosById.get(atuacao.projetoId);
         const nomeProjeto = projeto?.titulo ?? "Projeto removido";
         const nomeEmpresa = projeto?.empresa ?? "Empresa não informada";
-        const hd = hdByAtuacaoId.get(atuacao.id) ?? 0;
+        // HD sempre 0 para atividade avulsa
+        const hd = isAtividadeAvulsa ? 0 : (hdByAtuacaoId.get(atuacao.id) ?? 0);
 
         return (
           <div 
@@ -701,12 +735,12 @@ export default function AtuacaoPage() {
                   </div>
                 </div>
 
-                {!isAtividadeAvulsa && (
-                  <div>
-                    <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Horas Disponíveis (HD)</p>
-                    <p className="text-base text-gray-900 dark:text-white">{hd.toFixed(2)}h</p>
-                  </div>
-                )}
+                <div>
+                  <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Horas Disponíveis (HD)</p>
+                  <p className="text-base text-gray-900 dark:text-white">
+                    {isAtividadeAvulsa ? "0h" : `${hd.toFixed(2)}h`}
+                  </p>
+                </div>
 
                 <div>
                   <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">Descrição</p>
