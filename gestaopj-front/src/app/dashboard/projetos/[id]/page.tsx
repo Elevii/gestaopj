@@ -119,6 +119,52 @@ export default function ProjetoDetalhesPage() {
     }
   }, [hasAccess, router]);
 
+  // Função para ordenar atividades: urgente primeiro (exceto concluídas), depois por status, depois por data de início
+  const ordenarAtividades = (atividadesList: Atividade[]): Atividade[] => {
+    return [...atividadesList].sort((a, b) => {
+      // Primeiro critério: Se está concluída, vai para o final
+      const aConcluida = a.status === "concluida";
+      const bConcluida = b.status === "concluida";
+      
+      if (aConcluida !== bConcluida) {
+        return aConcluida ? 1 : -1; // Concluída vai para o final
+      }
+      
+      // Se ambas não estão concluídas, urgente vem primeiro
+      if (!aConcluida && !bConcluida) {
+        const aUrgente = a.prioridade === "urgente";
+        const bUrgente = b.prioridade === "urgente";
+        
+        if (aUrgente !== bUrgente) {
+          return aUrgente ? -1 : 1; // Urgente vem primeiro
+        }
+      }
+      
+      // Segundo critério: Status (em_execucao = 1, pendente = 2, concluida = 3)
+      const statusOrder: Record<string, number> = {
+        em_execucao: 1,
+        pendente: 2,
+        concluida: 3,
+      };
+      const statusA = statusOrder[a.status] || 99;
+      const statusB = statusOrder[b.status] || 99;
+      
+      if (statusA !== statusB) {
+        return statusA - statusB;
+      }
+      
+      // Terceiro critério: Data de início (mais antiga primeiro)
+      const dataA = new Date(a.dataInicio).getTime();
+      const dataB = new Date(b.dataInicio).getTime();
+      return dataA - dataB;
+    });
+  };
+
+  const atividadesDoProjeto = useMemo(() => {
+    const filtradas = atividades.filter((a) => a.projetoId === projetoId);
+    return ordenarAtividades(filtradas);
+  }, [atividades, projetoId]);
+
   if (hasAccess === null) {
     return (
       <div className="flex h-full items-center justify-center">
@@ -188,48 +234,26 @@ export default function ProjetoDetalhesPage() {
     }
   };
 
-  // Função para obter ícone de prioridade
+  // Função para obter ícone de prioridade (apenas para urgente)
   const getPrioridadeIcon = (prioridade?: PrioridadeAtividade) => {
-    if (!prioridade) return null;
-    switch (prioridade) {
-      case "urgente":
-        return <span className="text-red-600 dark:text-red-400 font-bold">!</span>;
-      case "normal":
-        return <span className="text-yellow-600 dark:text-yellow-400 font-bold">*</span>;
-      case "baixo":
-        return <span className="text-gray-600 dark:text-gray-400 font-bold">-</span>;
-      default:
-        return null;
+    if (prioridade === "urgente") {
+      return (
+        <svg
+          className="w-5 h-5 text-red-600 dark:text-red-400"
+          fill="currentColor"
+          viewBox="0 0 20 20"
+          title="Urgente"
+        >
+          <path
+            fillRule="evenodd"
+            d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
+            clipRule="evenodd"
+          />
+        </svg>
+      );
     }
+    return null;
   };
-
-  // Função para ordenar atividades: primeiro por status (em_execucao > pendente), depois por data de início
-  const ordenarAtividades = (atividades: Atividade[]): Atividade[] => {
-    return [...atividades].sort((a, b) => {
-      // Primeiro critério: Status (em_execucao = 1, pendente = 2, concluida = 3)
-      const statusOrder: Record<string, number> = {
-        em_execucao: 1,
-        pendente: 2,
-        concluida: 3,
-      };
-      const statusA = statusOrder[a.status] || 99;
-      const statusB = statusOrder[b.status] || 99;
-      
-      if (statusA !== statusB) {
-        return statusA - statusB;
-      }
-      
-      // Segundo critério: Data de início (mais antiga primeiro)
-      const dataA = new Date(a.dataInicio).getTime();
-      const dataB = new Date(b.dataInicio).getTime();
-      return dataA - dataB;
-    });
-  };
-
-  const atividadesDoProjeto = useMemo(() => {
-    const filtradas = atividades.filter((a) => a.projetoId === projetoId);
-    return ordenarAtividades(filtradas);
-  }, [atividades, projetoId]);
 
   const faturasDoProjeto = faturas
     .filter((f) => f.projetoId === projetoId)
@@ -684,13 +708,9 @@ export default function ProjetoDetalhesPage() {
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="flex items-center gap-2">
                               {getPrioridadeIcon(atividade.prioridade) && (
-                                <span className="text-lg" title={
-                                  atividade.prioridade === "urgente" ? "Urgente" :
-                                  atividade.prioridade === "normal" ? "Normal" :
-                                  "Baixo"
-                                }>
+                                <div className="flex-shrink-0">
                                   {getPrioridadeIcon(atividade.prioridade)}
-                                </span>
+                                </div>
                               )}
                               <div className="text-sm font-medium text-gray-900 dark:text-white">
                                 {atividade.titulo}
@@ -968,9 +988,9 @@ export default function ProjetoDetalhesPage() {
                   <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Título</p>
                   <div className="flex items-center gap-2">
                     {getPrioridadeIcon(atividade.prioridade) && (
-                      <span className="text-xl">
+                      <div className="flex-shrink-0">
                         {getPrioridadeIcon(atividade.prioridade)}
-                      </span>
+                      </div>
                     )}
                     <p className="text-base text-gray-900 dark:text-white font-semibold">{atividade.titulo}</p>
                   </div>
@@ -1002,12 +1022,20 @@ export default function ProjetoDetalhesPage() {
                   </div>
                   <div>
                     <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Prioridade</p>
-                    <p className="text-base text-gray-900 dark:text-white">
-                      {atividade.prioridade === "urgente" ? "! Urgente" :
-                       atividade.prioridade === "normal" ? "* Normal" :
-                       atividade.prioridade === "baixo" ? "- Baixo" :
-                       "Não definida"}
-                    </p>
+                    <div className="flex items-center gap-2">
+                      {getPrioridadeIcon(atividade.prioridade) ? (
+                        <>
+                          {getPrioridadeIcon(atividade.prioridade)}
+                          <span className="text-base text-gray-900 dark:text-white">
+                            {atividade.prioridade === "urgente" ? "Urgente" :
+                             atividade.prioridade === "normal" ? "Normal" :
+                             "Baixo"}
+                          </span>
+                        </>
+                      ) : (
+                        <span className="text-base text-gray-500 dark:text-gray-400">Não definida</span>
+                      )}
+                    </div>
                   </div>
                   <div>
                     <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Horas Estimadas</p>

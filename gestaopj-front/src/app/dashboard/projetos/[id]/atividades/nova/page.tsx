@@ -54,7 +54,7 @@ export default function NovaAtividadePage() {
     horasAtuacao: "",
     custoTarefa: "",
     descricao: "",
-    prioridade: "" as PrioridadeAtividade | "",
+    prioridade: "normal" as PrioridadeAtividade | "",
   });
   const [custoManual, setCustoManual] = useState(false);
   const lastHorasAtuacaoRef = useRef<string>("");
@@ -183,7 +183,7 @@ export default function NovaAtividadePage() {
           dataInicio: formData.dataInicio,
           horasAtuacao: parseFloat(formData.horasAtuacao),
           ...(formData.descricao.trim() ? { descricao: formData.descricao.trim() } : {}),
-          ...(formData.prioridade ? { prioridade: formData.prioridade as PrioridadeAtividade } : {}),
+          prioridade: (formData.prioridade || "normal") as PrioridadeAtividade,
           ...(custoManual
             ? {
                 custoTarefa: isNaN(custoNumerico) ? 0 : custoNumerico,
@@ -377,13 +377,12 @@ export default function NovaAtividadePage() {
                   onChange={handleChange}
                   className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors dark:bg-gray-700 dark:text-white"
                 >
-                  <option value="">Selecione uma prioridade (opcional)</option>
-                  <option value="urgente">! Urgente</option>
-                  <option value="normal">* Normal</option>
-                  <option value="baixo">- Baixo</option>
+                  <option value="urgente">Urgente</option>
+                  <option value="normal">Normal</option>
+                  <option value="baixo">Baixo</option>
                 </select>
                 <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                  Defina a prioridade da atividade (opcional)
+                  Defina a prioridade da atividade (padrão: Normal)
                 </p>
               </div>
 

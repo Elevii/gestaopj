@@ -36,7 +36,7 @@ export default function EditarAtividadePage() {
     custoTarefa: "",
     status: "pendente" as StatusAtividade,
     descricao: "",
-    prioridade: "" as PrioridadeAtividade | "",
+    prioridade: "normal" as PrioridadeAtividade | "",
   });
   const [custoManual, setCustoManual] = useState(false);
   const lastHorasAtuacaoRef = useRef<string>("");
@@ -54,7 +54,7 @@ export default function EditarAtividadePage() {
         ).toString(),
         status: atividade.status || "pendente",
         descricao: atividade.descricao || "",
-        prioridade: atividade.prioridade || "",
+        prioridade: atividade.prioridade || "normal",
       });
       // inicializa a ref para não disparar "reset" na primeira interação
       lastHorasAtuacaoRef.current = atividade.horasAtuacao.toString();
@@ -178,12 +178,8 @@ export default function EditarAtividadePage() {
         updateData.descricao = undefined;
       }
       
-      // Adiciona prioridade apenas se selecionada
-      if (formData.prioridade) {
-        updateData.prioridade = formData.prioridade as PrioridadeAtividade;
-      } else {
-        updateData.prioridade = undefined;
-      }
+      // Adiciona prioridade (sempre tem valor padrão "normal")
+      updateData.prioridade = (formData.prioridade || "normal") as PrioridadeAtividade;
       
       await updateAtividade(atividadeId, updateData);
 
@@ -428,13 +424,12 @@ export default function EditarAtividadePage() {
                   onChange={handleChange}
                   className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors dark:bg-gray-700 dark:text-white"
                 >
-                  <option value="">Selecione uma prioridade (opcional)</option>
-                  <option value="urgente">! Urgente</option>
-                  <option value="normal">* Normal</option>
-                  <option value="baixo">- Baixo</option>
+                  <option value="urgente">Urgente</option>
+                  <option value="normal">Normal</option>
+                  <option value="baixo">Baixo</option>
                 </select>
                 <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                  Defina a prioridade da atividade (opcional)
+                  Defina a prioridade da atividade (padrão: Normal)
                 </p>
               </div>
 
