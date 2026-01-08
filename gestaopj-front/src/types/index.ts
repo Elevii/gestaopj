@@ -33,6 +33,7 @@ export interface Atividade {
   dataFimEstimada: string;
   custoTarefa: number;
   status: StatusAtividade;
+  descricao?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -74,6 +75,10 @@ export interface CreateAtividadeDTO {
    * horasAtuacao * valorHora
    */
   custoTarefa?: number;
+  /**
+   * Descrição opcional da atividade
+   */
+  descricao?: string;
 }
 
 export interface Atuacao {

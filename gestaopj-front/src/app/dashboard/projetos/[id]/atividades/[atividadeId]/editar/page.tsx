@@ -5,7 +5,7 @@ import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 import { useProjetos } from "@/contexts/ProjetoContext";
 import { useAtividades } from "@/contexts/AtividadeContext";
-import { StatusAtividade } from "@/types";
+import { StatusAtividade, CreateAtividadeDTO } from "@/types";
 import { calcularDataFimEstimada } from "@/utils/estimativas";
 import { useFormatDate } from "@/hooks/useFormatDate";
 
@@ -35,6 +35,7 @@ export default function EditarAtividadePage() {
     horasUtilizadas: "",
     custoTarefa: "",
     status: "pendente" as StatusAtividade,
+    descricao: "",
   });
   const [custoManual, setCustoManual] = useState(false);
   const lastHorasAtuacaoRef = useRef<string>("");
@@ -51,6 +52,7 @@ export default function EditarAtividadePage() {
           (atividade as any).custoTarefa ?? (atividade as any).lucroEstimado ?? 0
         ).toString(),
         status: atividade.status || "pendente",
+        descricao: atividade.descricao || "",
       });
       // inicializa a ref para não disparar "reset" na primeira interação
       lastHorasAtuacaoRef.current = atividade.horasAtuacao.toString();
@@ -100,7 +102,7 @@ export default function EditarAtividadePage() {
   }
 
   const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
   ) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
@@ -149,7 +151,11 @@ export default function EditarAtividadePage() {
     setIsLoading(true);
     try {
       const custoNumerico = parseFloat(formData.custoTarefa || "0");
-      await updateAtividade(atividadeId, {
+      const updateData: Partial<CreateAtividadeDTO> & {
+        status?: StatusAtividade;
+        horasUtilizadas?: number;
+        descricao?: string | undefined;
+      } = {
         titulo: formData.titulo.trim(),
         dataInicio: formData.dataInicio,
         horasAtuacao: parseFloat(formData.horasAtuacao),
@@ -160,7 +166,16 @@ export default function EditarAtividadePage() {
               custoTarefa: isNaN(custoNumerico) ? 0 : custoNumerico,
             }
           : {}),
-      });
+      };
+      
+      // Adiciona descrição apenas se não estiver vazia, caso contrário remove (undefined)
+      if (formData.descricao.trim()) {
+        updateData.descricao = formData.descricao.trim();
+      } else {
+        updateData.descricao = undefined;
+      }
+      
+      await updateAtividade(atividadeId, updateData);
 
       router.push(`/dashboard/projetos/${projetoId}`);
     } catch (error) {
@@ -364,6 +379,28 @@ export default function EditarAtividadePage() {
                     Atualizado pela tela de atuações
                   </p>
                 </div>
+              </div>
+
+              {/* Descrição */}
+              <div>
+                <label
+                  htmlFor="descricao"
+                  className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+                >
+                  Descrição
+                </label>
+                <textarea
+                  id="descricao"
+                  name="descricao"
+                  rows={4}
+                  value={formData.descricao}
+                  onChange={handleChange}
+                  className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors dark:bg-gray-700 dark:text-white dark:placeholder-gray-400 resize-y"
+                  placeholder="Descrição opcional da atividade..."
+                />
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  Informações adicionais sobre esta atividade (opcional)
+                </p>
               </div>
 
               {/* Custo da Tarefa */}

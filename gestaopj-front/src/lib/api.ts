@@ -1,4 +1,6 @@
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_URL ||
+  "https://gestaopj-production.up.railway.app";
 
 // Log sempre para debug
 if (typeof window !== "undefined") {

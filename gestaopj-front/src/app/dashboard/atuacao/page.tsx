@@ -26,7 +26,7 @@ const statusLabel: Record<StatusAtividade, string> = {
 
 export default function AtuacaoPage() {
   const { projetos } = useProjetos();
-  const { atividades } = useAtividades();
+  const { atividades, getAtividadeById } = useAtividades();
   const { atuacoes, loading, deleteAtuacao, getAtuacaoById } = useAtuacoes();
   const { configuracoes } = useConfiguracoes();
 
@@ -425,7 +425,13 @@ export default function AtuacaoPage() {
                           </td>
                           <td className="px-6 py-4">
                             <div className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2">
-                              {a.descricao || "-"}
+                              {(() => {
+                                if (isAtividadeAvulsa) {
+                                  return "Nenhuma descrição adicional";
+                                }
+                                const atividadeRelacionada = getAtividadeById(a.atividadeId);
+                                return atividadeRelacionada?.descricao || "Nenhuma descrição adicional";
+                              })()}
                             </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium" onClick={(e) => e.stopPropagation()}>
@@ -702,12 +708,25 @@ export default function AtuacaoPage() {
                   </div>
                 )}
 
-                {atuacao.descricao && (
-                  <div>
-                    <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">Descrição</p>
-                    <p className="text-base text-gray-900 dark:text-white whitespace-pre-wrap">{atuacao.descricao}</p>
-                  </div>
-                )}
+                <div>
+                  <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">Descrição</p>
+                  {(() => {
+                    if (isAtividadeAvulsa) {
+                      return (
+                        <p className="text-base text-gray-500 dark:text-gray-400 italic">
+                          Nenhuma descrição adicional
+                        </p>
+                      );
+                    }
+                    const atividadeRelacionada = getAtividadeById(atuacao.atividadeId);
+                    const descricaoAtividade = atividadeRelacionada?.descricao;
+                    return (
+                      <p className="text-base text-gray-900 dark:text-white whitespace-pre-wrap">
+                        {descricaoAtividade || "Nenhuma descrição adicional"}
+                      </p>
+                    );
+                  })()}
+                </div>
 
                 {atuacao.impactoGerado && (
                   <div>

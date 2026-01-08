@@ -22,7 +22,7 @@ export default function ProjetoDetalhesPage() {
   const router = useRouter();
   const projetoId = params.id as string;
   const { getProjetoById, deleteProjeto } = useProjetos();
-  const { atividades, loading, deleteAtividade } = useAtividades();
+  const { atividades, loading, deleteAtividade, getAtividadeById } = useAtividades();
   const { faturas, updateFatura } = useFaturamento();
   const { configuracoes } = useConfiguracoes();
   const { formatDate } = useFormatDate();
@@ -34,6 +34,7 @@ export default function ProjetoDetalhesPage() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [activityToDelete, setActivityToDelete] = useState<string | null>(null);
   const [isDeletingActivity, setIsDeletingActivity] = useState(false);
+  const [selectedActivityId, setSelectedActivityId] = useState<string | null>(null);
   const [hasAccess, setHasAccess] = useState<boolean | null>(null);
   const [projectMembers, setProjectMembers] = useState<
     Array<{ id: string; name: string; email: string }>
@@ -686,6 +687,31 @@ export default function ProjetoDetalhesPage() {
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                             <div className="flex items-center justify-end space-x-2">
+                              <button
+                                onClick={() => setSelectedActivityId(atividade.id)}
+                                className="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300"
+                                title="Visualizar detalhes"
+                              >
+                                <svg
+                                  className="w-5 h-5"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                                  />
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+                                  />
+                                </svg>
+                              </button>
                               <Link
                                 href={`/dashboard/projetos/${projetoId}/atividades/${atividade.id}/editar`}
                                 className="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300"
@@ -848,6 +874,120 @@ export default function ProjetoDetalhesPage() {
           </div>
         </div>
       )}
+
+      {/* Modal de detalhes da atividade */}
+      {selectedActivityId && (() => {
+        const atividade = getAtividadeById(selectedActivityId);
+        if (!atividade) return null;
+
+        const statusLabel = atividade.status === "concluida"
+          ? "Concluída"
+          : atividade.status === "em_execucao"
+            ? "Em execução"
+            : "Pendente";
+
+        return (
+          <div 
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 dark:bg-black/70"
+            onClick={() => setSelectedActivityId(null)}
+          >
+            <div 
+              className="bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+                  Detalhes da Atividade
+                </h2>
+                <button
+                  onClick={() => setSelectedActivityId(null)}
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Título</p>
+                  <p className="text-base text-gray-900 dark:text-white font-semibold">{atividade.titulo}</p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Data de Início</p>
+                    <p className="text-base text-gray-900 dark:text-white">{formatDate(atividade.dataInicio)}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Término Estimado</p>
+                    <p className="text-base text-gray-900 dark:text-white">{formatDate(atividade.dataFimEstimada)}</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Status</p>
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                      atividade.status === "concluida"
+                        ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
+                        : atividade.status === "em_execucao"
+                          ? "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400"
+                          : "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300"
+                    }`}>
+                      {statusLabel}
+                    </span>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Horas Estimadas</p>
+                    <p className="text-base text-gray-900 dark:text-white">{atividade.horasAtuacao}h</p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Horas Utilizadas</p>
+                    <p className="text-base text-gray-900 dark:text-white">{atividade.horasUtilizadas || 0}h</p>
+                  </div>
+                </div>
+
+                <div>
+                  <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Custo da Tarefa</p>
+                  <p className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">{formatCurrency(atividade.custoTarefa)}</p>
+                </div>
+
+                {atividade.descricao && (
+                  <div>
+                    <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">Descrição</p>
+                    <p className="text-base text-gray-900 dark:text-white whitespace-pre-wrap">{atividade.descricao}</p>
+                  </div>
+                )}
+
+                {!atividade.descricao && (
+                  <div>
+                    <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">Descrição</p>
+                    <p className="text-base text-gray-500 dark:text-gray-400 italic">Nenhuma descrição adicional</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center justify-end gap-3 mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
+                <button
+                  onClick={() => setSelectedActivityId(null)}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600"
+                >
+                  Fechar
+                </button>
+                <Link
+                  href={`/dashboard/projetos/${projetoId}/atividades/${atividade.id}/editar`}
+                  className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700"
+                  onClick={() => setSelectedActivityId(null)}
+                >
+                  Editar Atividade
+                </Link>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

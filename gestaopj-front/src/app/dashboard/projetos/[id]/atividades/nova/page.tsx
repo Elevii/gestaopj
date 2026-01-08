@@ -52,6 +52,7 @@ export default function NovaAtividadePage() {
     dataInicio: formatTodayISODateLocal(), // Data atual (local) como padrão
     horasAtuacao: "",
     custoTarefa: "",
+    descricao: "",
   });
   const [custoManual, setCustoManual] = useState(false);
   const lastHorasAtuacaoRef = useRef<string>("");
@@ -114,7 +115,7 @@ export default function NovaAtividadePage() {
     setFormData((prev) => ({ ...prev, custoTarefa: custo.toFixed(2) }));
   }, [custoManual, formData.horasAtuacao, projeto]);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
     if (name === "custoTarefa") {
@@ -179,6 +180,7 @@ export default function NovaAtividadePage() {
           titulo: formData.titulo.trim(),
           dataInicio: formData.dataInicio,
           horasAtuacao: parseFloat(formData.horasAtuacao),
+          ...(formData.descricao.trim() ? { descricao: formData.descricao.trim() } : {}),
           ...(custoManual
             ? {
                 custoTarefa: isNaN(custoNumerico) ? 0 : custoNumerico,
@@ -332,6 +334,28 @@ export default function NovaAtividadePage() {
                 )}
                 <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                   Estimativa de horas que serão dedicadas a esta atividade
+                </p>
+              </div>
+
+              {/* Descrição */}
+              <div>
+                <label
+                  htmlFor="descricao"
+                  className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+                >
+                  Descrição
+                </label>
+                <textarea
+                  id="descricao"
+                  name="descricao"
+                  rows={4}
+                  value={formData.descricao}
+                  onChange={handleChange}
+                  className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors dark:bg-gray-700 dark:text-white dark:placeholder-gray-400 resize-y"
+                  placeholder="Descrição opcional da atividade..."
+                />
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  Informações adicionais sobre esta atividade (opcional)
                 </p>
               </div>
 
