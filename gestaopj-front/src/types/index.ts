@@ -21,6 +21,8 @@ export type StatusProjeto = "ativo" | "pausado" | "concluido" | "cancelado";
 
 export type StatusAtividade = "pendente" | "em_execucao" | "concluida";
 
+export type PrioridadeAtividade = "urgente" | "normal" | "baixo";
+
 export type TipoAtuacao = "reuniao" | "execucao" | "planejamento";
 
 export interface Atividade {
@@ -34,6 +36,7 @@ export interface Atividade {
   custoTarefa: number;
   status: StatusAtividade;
   descricao?: string;
+  prioridade?: PrioridadeAtividade;
   createdAt: string;
   updatedAt: string;
 }
@@ -79,6 +82,10 @@ export interface CreateAtividadeDTO {
    * Descrição opcional da atividade
    */
   descricao?: string;
+  /**
+   * Prioridade da atividade (urgente, normal, baixo)
+   */
+  prioridade?: PrioridadeAtividade;
 }
 
 export interface Atuacao {

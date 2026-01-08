@@ -5,7 +5,7 @@ import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 import { useProjetos } from "@/contexts/ProjetoContext";
 import { useAtividades } from "@/contexts/AtividadeContext";
-import { StatusAtividade, CreateAtividadeDTO } from "@/types";
+import { StatusAtividade, CreateAtividadeDTO, PrioridadeAtividade } from "@/types";
 import { calcularDataFimEstimada } from "@/utils/estimativas";
 import { useFormatDate } from "@/hooks/useFormatDate";
 
@@ -36,6 +36,7 @@ export default function EditarAtividadePage() {
     custoTarefa: "",
     status: "pendente" as StatusAtividade,
     descricao: "",
+    prioridade: "" as PrioridadeAtividade | "",
   });
   const [custoManual, setCustoManual] = useState(false);
   const lastHorasAtuacaoRef = useRef<string>("");
@@ -53,6 +54,7 @@ export default function EditarAtividadePage() {
         ).toString(),
         status: atividade.status || "pendente",
         descricao: atividade.descricao || "",
+        prioridade: atividade.prioridade || "",
       });
       // inicializa a ref para não disparar "reset" na primeira interação
       lastHorasAtuacaoRef.current = atividade.horasAtuacao.toString();
@@ -155,6 +157,7 @@ export default function EditarAtividadePage() {
         status?: StatusAtividade;
         horasUtilizadas?: number;
         descricao?: string | undefined;
+        prioridade?: PrioridadeAtividade | undefined;
       } = {
         titulo: formData.titulo.trim(),
         dataInicio: formData.dataInicio,
@@ -173,6 +176,13 @@ export default function EditarAtividadePage() {
         updateData.descricao = formData.descricao.trim();
       } else {
         updateData.descricao = undefined;
+      }
+      
+      // Adiciona prioridade apenas se selecionada
+      if (formData.prioridade) {
+        updateData.prioridade = formData.prioridade as PrioridadeAtividade;
+      } else {
+        updateData.prioridade = undefined;
       }
       
       await updateAtividade(atividadeId, updateData);
@@ -400,6 +410,31 @@ export default function EditarAtividadePage() {
                 />
                 <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                   Informações adicionais sobre esta atividade (opcional)
+                </p>
+              </div>
+
+              {/* Prioridade */}
+              <div>
+                <label
+                  htmlFor="prioridade"
+                  className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+                >
+                  Prioridade
+                </label>
+                <select
+                  id="prioridade"
+                  name="prioridade"
+                  value={formData.prioridade}
+                  onChange={handleChange}
+                  className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors dark:bg-gray-700 dark:text-white"
+                >
+                  <option value="">Selecione uma prioridade (opcional)</option>
+                  <option value="urgente">! Urgente</option>
+                  <option value="normal">* Normal</option>
+                  <option value="baixo">- Baixo</option>
+                </select>
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  Defina a prioridade da atividade (opcional)
                 </p>
               </div>
 

@@ -12,9 +12,9 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useCompany } from "@/contexts/CompanyContext";
 import { projectMemberService } from "@/services/projectMemberService";
 import { userService } from "@/services/userService";
-import { Atividade } from "@/types";
+import { Atividade, PrioridadeAtividade } from "@/types";
 import { useFormatDate } from "@/hooks/useFormatDate";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { parseISO } from "date-fns";
 
 export default function ProjetoDetalhesPage() {
@@ -188,9 +188,48 @@ export default function ProjetoDetalhesPage() {
     }
   };
 
-  const atividadesDoProjeto = atividades.filter(
-    (a) => a.projetoId === projetoId
-  );
+  // Função para obter ícone de prioridade
+  const getPrioridadeIcon = (prioridade?: PrioridadeAtividade) => {
+    if (!prioridade) return null;
+    switch (prioridade) {
+      case "urgente":
+        return <span className="text-red-600 dark:text-red-400 font-bold">!</span>;
+      case "normal":
+        return <span className="text-yellow-600 dark:text-yellow-400 font-bold">*</span>;
+      case "baixo":
+        return <span className="text-gray-600 dark:text-gray-400 font-bold">-</span>;
+      default:
+        return null;
+    }
+  };
+
+  // Função para ordenar atividades: primeiro por status (em_execucao > pendente), depois por data de início
+  const ordenarAtividades = (atividades: Atividade[]): Atividade[] => {
+    return [...atividades].sort((a, b) => {
+      // Primeiro critério: Status (em_execucao = 1, pendente = 2, concluida = 3)
+      const statusOrder: Record<string, number> = {
+        em_execucao: 1,
+        pendente: 2,
+        concluida: 3,
+      };
+      const statusA = statusOrder[a.status] || 99;
+      const statusB = statusOrder[b.status] || 99;
+      
+      if (statusA !== statusB) {
+        return statusA - statusB;
+      }
+      
+      // Segundo critério: Data de início (mais antiga primeiro)
+      const dataA = new Date(a.dataInicio).getTime();
+      const dataB = new Date(b.dataInicio).getTime();
+      return dataA - dataB;
+    });
+  };
+
+  const atividadesDoProjeto = useMemo(() => {
+    const filtradas = atividades.filter((a) => a.projetoId === projetoId);
+    return ordenarAtividades(filtradas);
+  }, [atividades, projetoId]);
 
   const faturasDoProjeto = faturas
     .filter((f) => f.projetoId === projetoId)
@@ -595,7 +634,11 @@ export default function ProjetoDetalhesPage() {
               },
               {} as Record<string, Atividade[]>
             )
-          ).map(([periodo, atividadesPeriodo]) => (
+          ).map(([periodo, atividadesPeriodo]) => {
+            // Ordena as atividades dentro de cada período
+            const atividadesOrdenadas = ordenarAtividades(atividadesPeriodo);
+            return [periodo, atividadesOrdenadas] as [string, Atividade[]];
+          }).map(([periodo, atividadesPeriodo]) => (
             <div key={periodo} className="space-y-4">
               <h2 className="text-lg font-semibold text-gray-900 dark:text-white capitalize">
                 {periodo}
@@ -639,8 +682,19 @@ export default function ProjetoDetalhesPage() {
                           className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                         >
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm font-medium text-gray-900 dark:text-white">
-                              {atividade.titulo}
+                            <div className="flex items-center gap-2">
+                              {getPrioridadeIcon(atividade.prioridade) && (
+                                <span className="text-lg" title={
+                                  atividade.prioridade === "urgente" ? "Urgente" :
+                                  atividade.prioridade === "normal" ? "Normal" :
+                                  "Baixo"
+                                }>
+                                  {getPrioridadeIcon(atividade.prioridade)}
+                                </span>
+                              )}
+                              <div className="text-sm font-medium text-gray-900 dark:text-white">
+                                {atividade.titulo}
+                              </div>
                             </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
@@ -912,7 +966,14 @@ export default function ProjetoDetalhesPage() {
               <div className="space-y-4">
                 <div>
                   <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Título</p>
-                  <p className="text-base text-gray-900 dark:text-white font-semibold">{atividade.titulo}</p>
+                  <div className="flex items-center gap-2">
+                    {getPrioridadeIcon(atividade.prioridade) && (
+                      <span className="text-xl">
+                        {getPrioridadeIcon(atividade.prioridade)}
+                      </span>
+                    )}
+                    <p className="text-base text-gray-900 dark:text-white font-semibold">{atividade.titulo}</p>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
@@ -940,13 +1001,23 @@ export default function ProjetoDetalhesPage() {
                     </span>
                   </div>
                   <div>
+                    <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Prioridade</p>
+                    <p className="text-base text-gray-900 dark:text-white">
+                      {atividade.prioridade === "urgente" ? "! Urgente" :
+                       atividade.prioridade === "normal" ? "* Normal" :
+                       atividade.prioridade === "baixo" ? "- Baixo" :
+                       "Não definida"}
+                    </p>
+                  </div>
+                  <div>
                     <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Horas Estimadas</p>
                     <p className="text-base text-gray-900 dark:text-white">{atividade.horasAtuacao}h</p>
                   </div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Horas Utilizadas</p>
-                    <p className="text-base text-gray-900 dark:text-white">{atividade.horasUtilizadas || 0}h</p>
-                  </div>
+                </div>
+
+                <div>
+                  <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Horas Utilizadas</p>
+                  <p className="text-base text-gray-900 dark:text-white">{atividade.horasUtilizadas || 0}h</p>
                 </div>
 
                 <div>
