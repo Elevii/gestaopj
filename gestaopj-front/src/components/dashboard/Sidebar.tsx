@@ -103,7 +103,6 @@ const navigationSections: NavigationSection[] = [
             />
           </svg>
         ),
-        adminOnly: true,
       },
     ],
   },
