@@ -12,17 +12,20 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useCompany } from "@/contexts/CompanyContext";
 import { projectMemberService } from "@/services/projectMemberService";
 import { userService } from "@/services/userService";
+import { atuacaoService } from "@/services/atuacaoService";
+import { userCompanySettingsService } from "@/services/userCompanySettingsService";
 import { Atividade, PrioridadeAtividade } from "@/types";
 import { useFormatDate } from "@/hooks/useFormatDate";
 import { useEffect, useMemo } from "react";
-import { parseISO } from "date-fns";
+import { parseISO, startOfMonth, addMonths, setDate, endOfMonth, format } from "date-fns";
 
 export default function ProjetoDetalhesPage() {
   const params = useParams();
   const router = useRouter();
   const projetoId = params.id as string;
   const { getProjetoById, deleteProjeto } = useProjetos();
-  const { atividades, loading, deleteAtividade, getAtividadeById } = useAtividades();
+  const { atividades, loading, deleteAtividade, getAtividadeById } =
+    useAtividades();
   const { faturas, updateFatura } = useFaturamento();
   const { configuracoes } = useConfiguracoes();
   const { formatDate } = useFormatDate();
@@ -30,11 +33,20 @@ export default function ProjetoDetalhesPage() {
   const { user, userCompanies } = useAuth();
   const { company } = useCompany();
 
+  // Verificar se é admin ou owner
+  const isOwnerOrAdmin = useMemo(() => {
+    if (!company) return false;
+    const membership = userCompanies.find((m) => m.companyId === company.id);
+    return membership?.role === "owner" || membership?.role === "admin";
+  }, [company, userCompanies]);
+
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [activityToDelete, setActivityToDelete] = useState<string | null>(null);
   const [isDeletingActivity, setIsDeletingActivity] = useState(false);
-  const [selectedActivityId, setSelectedActivityId] = useState<string | null>(null);
+  const [selectedActivityId, setSelectedActivityId] = useState<string | null>(
+    null
+  );
   const [hasAccess, setHasAccess] = useState<boolean | null>(null);
   const [projectMembers, setProjectMembers] = useState<
     Array<{ id: string; name: string; email: string }>
@@ -125,21 +137,21 @@ export default function ProjetoDetalhesPage() {
       // Primeiro critério: Se está concluída, vai para o final
       const aConcluida = a.status === "concluida";
       const bConcluida = b.status === "concluida";
-      
+
       if (aConcluida !== bConcluida) {
         return aConcluida ? 1 : -1; // Concluída vai para o final
       }
-      
+
       // Se ambas não estão concluídas, urgente vem primeiro
       if (!aConcluida && !bConcluida) {
         const aUrgente = a.prioridade === "urgente";
         const bUrgente = b.prioridade === "urgente";
-        
+
         if (aUrgente !== bUrgente) {
           return aUrgente ? -1 : 1; // Urgente vem primeiro
         }
       }
-      
+
       // Segundo critério: Status (em_execucao = 1, pendente = 2, concluida = 3)
       const statusOrder: Record<string, number> = {
         em_execucao: 1,
@@ -148,11 +160,11 @@ export default function ProjetoDetalhesPage() {
       };
       const statusA = statusOrder[a.status] || 99;
       const statusB = statusOrder[b.status] || 99;
-      
+
       if (statusA !== statusB) {
         return statusA - statusB;
       }
-      
+
       // Terceiro critério: Data de início (mais antiga primeiro)
       const dataA = new Date(a.dataInicio).getTime();
       const dataB = new Date(b.dataInicio).getTime();
@@ -164,6 +176,165 @@ export default function ProjetoDetalhesPage() {
     const filtradas = atividades.filter((a) => a.projetoId === projetoId);
     return ordenarAtividades(filtradas);
   }, [atividades, projetoId]);
+
+  // Função para calcular período de faturamento atual
+  const calcularPeriodoFaturamentoAtual = useMemo(() => {
+    if (!company) return { inicio: "", fim: "" };
+
+    const now = new Date();
+    const diaInicio = company.diaInicioFaturamento || 1;
+    const diaFim = company.diaFimFaturamento || 31;
+
+    const baseMonth = startOfMonth(now);
+    let inicio: Date;
+    let fim: Date;
+
+    if (diaInicio > diaFim) {
+      // Período atravessa meses (ex: dia 26 até dia 25 do mês seguinte)
+      const inicioMonth = baseMonth;
+      inicio = setDate(
+        inicioMonth,
+        Math.min(diaInicio, endOfMonth(inicioMonth).getDate())
+      );
+      const fimMonth = addMonths(baseMonth, 1);
+      fim = setDate(
+        fimMonth,
+        Math.min(diaFim, endOfMonth(fimMonth).getDate())
+      );
+    } else {
+      // Período dentro do mesmo mês
+      inicio = setDate(
+        baseMonth,
+        Math.min(diaInicio, endOfMonth(baseMonth).getDate())
+      );
+      fim = setDate(
+        baseMonth,
+        Math.min(diaFim, endOfMonth(baseMonth).getDate())
+      );
+    }
+
+    return {
+      inicio: format(inicio, "yyyy-MM-dd"),
+      fim: format(fim, "yyyy-MM-dd"),
+    };
+  }, [company]);
+
+  // Estado para armazenar os custos calculados
+  const [custos, setCustos] = useState<{
+    custoTotal: { horistas: number; valorFixo: number; total: number };
+    custoMensal: { horistas: number; valorFixo: number; total: number };
+  }>({
+    custoTotal: { horistas: 0, valorFixo: 0, total: 0 },
+    custoMensal: { horistas: 0, valorFixo: 0, total: 0 },
+  });
+
+  // Calcular custos do projeto (total e mensal)
+  useEffect(() => {
+    if (!isOwnerOrAdmin || !company || !projetoId) {
+      setCustos({
+        custoTotal: { horistas: 0, valorFixo: 0, total: 0 },
+        custoMensal: { horistas: 0, valorFixo: 0, total: 0 },
+      });
+      return;
+    }
+
+    const calcularCustos = async () => {
+      try {
+        // Buscar todas as atuações do projeto
+        const todasAtuacoes = await atuacaoService.findAll(company.id);
+        const atuacoesDoProjeto = todasAtuacoes.filter(
+          (a) => a.projetoId === projetoId
+        );
+
+        // Calcular custo total (todas as atuações do projeto)
+        let custoTotalHoristas = 0;
+        let custoTotalValorFixo = 0;
+        const membrosValorFixoUsados = new Set<string>(); // Para evitar duplicar valor fixo no mesmo período
+
+        // Calcular custo mensal (atuações do período de faturamento atual)
+        let custoMensalHoristas = 0;
+        let custoMensalValorFixo = 0;
+        const membrosValorFixoMensalUsados = new Set<string>();
+
+        for (const atuacao of atuacoesDoProjeto) {
+          if (!atuacao.userId) continue;
+
+          // Buscar configuração do membro
+          const settings = await userCompanySettingsService.findByUserAndCompany(
+            atuacao.userId,
+            company.id
+          );
+
+          if (!settings) continue;
+
+          // Extrair data da atuação (YYYY-MM-DD)
+          const dataAtuacao = atuacao.data.includes("T")
+            ? atuacao.data.split("T")[0]
+            : atuacao.data;
+
+          // Verificar se está no período de faturamento atual
+          const estaNoPeriodoMensal =
+            calcularPeriodoFaturamentoAtual.inicio &&
+            calcularPeriodoFaturamentoAtual.fim &&
+            dataAtuacao >= calcularPeriodoFaturamentoAtual.inicio &&
+            dataAtuacao <= calcularPeriodoFaturamentoAtual.fim;
+
+          if (settings.horista) {
+            // Membro horista: calcular baseado em horas * valorHora
+            const valorHora = settings.valorHora || 0;
+            const custoAtuacao = (atuacao.horasUtilizadas || 0) * valorHora;
+
+            custoTotalHoristas += custoAtuacao;
+            if (estaNoPeriodoMensal) {
+              custoMensalHoristas += custoAtuacao;
+            }
+          } else {
+            // Membro com valor fixo: usar valorFixo completo por período
+            const valorFixo = settings.valorFixo || 0;
+
+            // Para custo total: somar uma vez por mês/período diferente
+            // Usar ano-mês como chave para agrupar
+            const anoMes = dataAtuacao.substring(0, 7); // YYYY-MM
+            const chaveTotal = `${atuacao.userId}_${anoMes}`;
+
+            if (!membrosValorFixoUsados.has(chaveTotal)) {
+              custoTotalValorFixo += valorFixo;
+              membrosValorFixoUsados.add(chaveTotal);
+            }
+
+            // Para custo mensal: somar apenas se está no período e ainda não foi contabilizado
+            if (estaNoPeriodoMensal) {
+              if (!membrosValorFixoMensalUsados.has(atuacao.userId)) {
+                custoMensalValorFixo += valorFixo;
+                membrosValorFixoMensalUsados.add(atuacao.userId);
+              }
+            }
+          }
+        }
+
+        setCustos({
+          custoTotal: {
+            horistas: custoTotalHoristas,
+            valorFixo: custoTotalValorFixo,
+            total: custoTotalHoristas + custoTotalValorFixo,
+          },
+          custoMensal: {
+            horistas: custoMensalHoristas,
+            valorFixo: custoMensalValorFixo,
+            total: custoMensalHoristas + custoMensalValorFixo,
+          },
+        });
+      } catch (error) {
+        console.error("Erro ao calcular custos do projeto:", error);
+        setCustos({
+          custoTotal: { horistas: 0, valorFixo: 0, total: 0 },
+          custoMensal: { horistas: 0, valorFixo: 0, total: 0 },
+        });
+      }
+    };
+
+    calcularCustos();
+  }, [isOwnerOrAdmin, company, projetoId, calcularPeriodoFaturamentoAtual]);
 
   if (hasAccess === null) {
     return (
@@ -275,11 +446,6 @@ export default function ProjetoDetalhesPage() {
   const totalCusto = atividadesDoProjeto.reduce((sum, atividade) => {
     return sum + atividade.custoTarefa;
   }, 0);
-
-  const lucroAtualEstimado =
-    projeto.tipoCobranca === "fixo"
-      ? (projeto.valorFixo ?? 0)
-      : totalHorasUtilizadas * (projeto.valorHora ?? 0);
 
   // Cálculos financeiros
   const totalFaturado = faturasDoProjeto.reduce((acc, f) => acc + f.valor, 0);
@@ -454,21 +620,7 @@ export default function ProjetoDetalhesPage() {
       )}
 
       {/* Resumo */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-          <p className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
-            {projeto.tipoCobranca === "fixo"
-              ? "Valor do Projeto"
-              : "Valor por Hora"}
-          </p>
-          <p className="text-2xl font-bold text-gray-900 dark:text-white">
-            {formatCurrency(
-              projeto.tipoCobranca === "fixo"
-                ? (projeto.valorFixo ?? 0)
-                : (projeto.valorHora ?? 0)
-            )}
-          </p>
-        </div>
+      <div className={`grid grid-cols-1 ${isOwnerOrAdmin ? "md:grid-cols-2" : "md:grid-cols-1"} gap-6`}>
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
           <p className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
             Horas Utilizadas
@@ -480,36 +632,71 @@ export default function ProjetoDetalhesPage() {
             de {totalHorasEstimadas}h estimadas
           </p>
         </div>
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <p className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
-                {projeto.tipoCobranca === "fixo"
-                  ? "Valor do Projeto"
-                  : "Lucro atual estimado"}
+        {isOwnerOrAdmin && (
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                Custo Estimado
               </p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                {formatCurrency(lucroAtualEstimado)}
-              </p>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                {projeto.tipoCobranca === "fixo"
-                  ? "Valor fixo fechado"
-                  : `${totalHorasUtilizadas}h × ${formatCurrency(projeto.valorHora ?? 0)}/h`}
-              </p>
+              {company && (
+                <Link
+                  href={`/dashboard/empresas/${company.id}`}
+                  className="text-xs font-medium text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300 inline-flex items-center gap-1.5 px-2 py-1 rounded-md hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors"
+                  title="Editar valores por hora/fixo dos membros"
+                >
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                    />
+                  </svg>
+                  Editar valores hora/fixo
+                </Link>
+              )}
             </div>
-            <div className="sm:border-l sm:border-gray-200 sm:dark:border-gray-700 sm:pl-4">
-              <p className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
-                Total Faturado
-              </p>
-              <p className="text-3xl font-bold text-green-600 dark:text-green-400">
-                {formatCurrency(totalFaturado)}
-              </p>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                Recebido: {formatCurrency(totalRecebido)}
-              </p>
+            <div className="space-y-4">
+              <div>
+                <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                  Custo Total
+                </p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                  {formatCurrency(custos.custoTotal.total)}
+                </p>
+                <div className="mt-2 space-y-1">
+                  <p className="text-xs text-gray-600 dark:text-gray-400">
+                    Horistas: {formatCurrency(custos.custoTotal.horistas)}
+                  </p>
+                  <p className="text-xs text-gray-600 dark:text-gray-400">
+                    Valor Fixo: {formatCurrency(custos.custoTotal.valorFixo)}
+                  </p>
+                </div>
+              </div>
+              <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
+                <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                  Custo Mensal (Período Atual)
+                </p>
+                <p className="text-xl font-bold text-gray-900 dark:text-white">
+                  {formatCurrency(custos.custoMensal.total)}
+                </p>
+                <div className="mt-2 space-y-1">
+                  <p className="text-xs text-gray-600 dark:text-gray-400">
+                    Horistas: {formatCurrency(custos.custoMensal.horistas)}
+                  </p>
+                  <p className="text-xs text-gray-600 dark:text-gray-400">
+                    Valor Fixo: {formatCurrency(custos.custoMensal.valorFixo)}
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Membros do Projeto */}
@@ -659,184 +846,188 @@ export default function ProjetoDetalhesPage() {
               },
               {} as Record<string, Atividade[]>
             )
-          ).map(([periodo, atividadesPeriodo]) => {
-            // Ordena as atividades dentro de cada período
-            const atividadesOrdenadas = ordenarAtividades(atividadesPeriodo);
-            return [periodo, atividadesOrdenadas] as [string, Atividade[]];
-          }).map(([periodo, atividadesPeriodo]) => (
-            <div key={periodo} className="space-y-4">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white capitalize">
-                {periodo}
-              </h2>
-              <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                    <thead className="bg-gray-50 dark:bg-gray-900">
-                      <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                          Atividade
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                          Início
-                        </th>
+          )
+            .map(([periodo, atividadesPeriodo]) => {
+              // Ordena as atividades dentro de cada período
+              const atividadesOrdenadas = ordenarAtividades(atividadesPeriodo);
+              return [periodo, atividadesOrdenadas] as [string, Atividade[]];
+            })
+            .map(([periodo, atividadesPeriodo]) => (
+              <div key={periodo} className="space-y-4">
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white capitalize">
+                  {periodo}
+                </h2>
+                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                      <thead className="bg-gray-50 dark:bg-gray-900">
+                        <tr>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                            Atividade
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                            Início
+                          </th>
 
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                          Horas Estimadas
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                          Horas Utilizadas
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                          Status
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                          Término Estimado
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                          Custo da Tarefa
-                        </th>
-                        <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                          Ações
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                      {atividadesPeriodo.map((atividade) => (
-                        <tr
-                          key={atividade.id}
-                          className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-                        >
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="flex items-center gap-2">
-                              {getPrioridadeIcon(atividade.prioridade) && (
-                                <div className="flex-shrink-0">
-                                  {getPrioridadeIcon(atividade.prioridade)}
-                                </div>
-                              )}
-                              <div className="text-sm font-medium text-gray-900 dark:text-white">
-                                {atividade.titulo}
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm text-gray-600 dark:text-gray-400">
-                              {formatDate(atividade.dataInicio)}
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm text-gray-900 dark:text-white">
-                              {atividade.horasAtuacao}h
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm text-gray-900 dark:text-white">
-                              {atividade.horasUtilizadas || 0}h
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <span
-                              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                atividade.status === "concluida"
-                                  ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
-                                  : atividade.status === "em_execucao"
-                                    ? "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400"
-                                    : "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300"
-                              }`}
-                            >
-                              {atividade.status === "concluida"
-                                ? "Concluída"
-                                : atividade.status === "em_execucao"
-                                  ? "Em execução"
-                                  : "Pendente"}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm text-gray-600 dark:text-gray-400">
-                              {formatDate(atividade.dataFimEstimada)}
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm font-medium text-indigo-600 dark:text-indigo-400">
-                              {formatCurrency(atividade.custoTarefa)}
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                            <div className="flex items-center justify-end space-x-2">
-                              <button
-                                onClick={() => setSelectedActivityId(atividade.id)}
-                                className="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300"
-                                title="Visualizar detalhes"
-                              >
-                                <svg
-                                  className="w-5 h-5"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  viewBox="0 0 24 24"
-                                >
-                                  <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth={2}
-                                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                                  />
-                                  <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth={2}
-                                    d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
-                                  />
-                                </svg>
-                              </button>
-                              <Link
-                                href={`/dashboard/projetos/${projetoId}/atividades/${atividade.id}/editar`}
-                                className="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300"
-                                title="Editar atividade"
-                              >
-                                <svg
-                                  className="w-5 h-5"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  viewBox="0 0 24 24"
-                                >
-                                  <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth={2}
-                                    d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                                  />
-                                </svg>
-                              </Link>
-                              <button
-                                onClick={() =>
-                                  setActivityToDelete(atividade.id)
-                                }
-                                className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
-                                title="Excluir atividade"
-                              >
-                                <svg
-                                  className="w-5 h-5"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  viewBox="0 0 24 24"
-                                >
-                                  <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth={2}
-                                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                                  />
-                                </svg>
-                              </button>
-                            </div>
-                          </td>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                            Horas Estimadas
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                            Horas Utilizadas
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                            Status
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                            Término Estimado
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                            Custo da Tarefa
+                          </th>
+                          <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                            Ações
+                          </th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                        {atividadesPeriodo.map((atividade) => (
+                          <tr
+                            key={atividade.id}
+                            className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                          >
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="flex items-center gap-2">
+                                {getPrioridadeIcon(atividade.prioridade) && (
+                                  <div className="flex-shrink-0">
+                                    {getPrioridadeIcon(atividade.prioridade)}
+                                  </div>
+                                )}
+                                <div className="text-sm font-medium text-gray-900 dark:text-white">
+                                  {atividade.titulo}
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="text-sm text-gray-600 dark:text-gray-400">
+                                {formatDate(atividade.dataInicio)}
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="text-sm text-gray-900 dark:text-white">
+                                {atividade.horasAtuacao}h
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="text-sm text-gray-900 dark:text-white">
+                                {atividade.horasUtilizadas || 0}h
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <span
+                                className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                  atividade.status === "concluida"
+                                    ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
+                                    : atividade.status === "em_execucao"
+                                      ? "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400"
+                                      : "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300"
+                                }`}
+                              >
+                                {atividade.status === "concluida"
+                                  ? "Concluída"
+                                  : atividade.status === "em_execucao"
+                                    ? "Em execução"
+                                    : "Pendente"}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="text-sm text-gray-600 dark:text-gray-400">
+                                {formatDate(atividade.dataFimEstimada)}
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="text-sm font-medium text-indigo-600 dark:text-indigo-400">
+                                {formatCurrency(atividade.custoTarefa)}
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                              <div className="flex items-center justify-end space-x-2">
+                                <button
+                                  onClick={() =>
+                                    setSelectedActivityId(atividade.id)
+                                  }
+                                  className="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300"
+                                  title="Visualizar detalhes"
+                                >
+                                  <svg
+                                    className="w-5 h-5"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth={2}
+                                      d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                                    />
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth={2}
+                                      d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+                                    />
+                                  </svg>
+                                </button>
+                                <Link
+                                  href={`/dashboard/projetos/${projetoId}/atividades/${atividade.id}/editar`}
+                                  className="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300"
+                                  title="Editar atividade"
+                                >
+                                  <svg
+                                    className="w-5 h-5"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth={2}
+                                      d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                                    />
+                                  </svg>
+                                </Link>
+                                <button
+                                  onClick={() =>
+                                    setActivityToDelete(atividade.id)
+                                  }
+                                  className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
+                                  title="Excluir atividade"
+                                >
+                                  <svg
+                                    className="w-5 h-5"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth={2}
+                                      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                    />
+                                  </svg>
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))
+            ))
         )
       ) : (
         <div className="space-y-6">
@@ -951,143 +1142,197 @@ export default function ProjetoDetalhesPage() {
       )}
 
       {/* Modal de detalhes da atividade */}
-      {selectedActivityId && (() => {
-        const atividade = getAtividadeById(selectedActivityId);
-        if (!atividade) return null;
+      {selectedActivityId &&
+        (() => {
+          const atividade = getAtividadeById(selectedActivityId);
+          if (!atividade) return null;
 
-        const statusLabel = atividade.status === "concluida"
-          ? "Concluída"
-          : atividade.status === "em_execucao"
-            ? "Em execução"
-            : "Pendente";
+          const statusLabel =
+            atividade.status === "concluida"
+              ? "Concluída"
+              : atividade.status === "em_execucao"
+                ? "Em execução"
+                : "Pendente";
 
-        return (
-          <div 
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 dark:bg-black/70"
-            onClick={() => setSelectedActivityId(null)}
-          >
-            <div 
-              className="bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto"
-              onClick={(e) => e.stopPropagation()}
+          return (
+            <div
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 dark:bg-black/70"
+              onClick={() => setSelectedActivityId(null)}
             >
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-                  Detalhes da Atividade
-                </h2>
-                <button
-                  onClick={() => setSelectedActivityId(null)}
-                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
-                >
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-
-              <div className="space-y-4">
-                <div>
-                  <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Título</p>
-                  <div className="flex items-center gap-2">
-                    {getPrioridadeIcon(atividade.prioridade) && (
-                      <div className="flex-shrink-0">
-                        {getPrioridadeIcon(atividade.prioridade)}
-                      </div>
-                    )}
-                    <p className="text-base text-gray-900 dark:text-white font-semibold">{atividade.titulo}</p>
-                  </div>
+              <div
+                className="bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+                    Detalhes da Atividade
+                  </h2>
+                  <button
+                    onClick={() => setSelectedActivityId(null)}
+                    className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
+                  >
+                    <svg
+                      className="w-6 h-6"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M6 18L18 6M6 6l12 12"
+                      />
+                    </svg>
+                  </button>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-4">
                   <div>
-                    <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Data de Início</p>
-                    <p className="text-base text-gray-900 dark:text-white">{formatDate(atividade.dataInicio)}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Término Estimado</p>
-                    <p className="text-base text-gray-900 dark:text-white">{formatDate(atividade.dataFimEstimada)}</p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-3 gap-4">
-                  <div>
-                    <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Status</p>
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                      atividade.status === "concluida"
-                        ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
-                        : atividade.status === "em_execucao"
-                          ? "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400"
-                          : "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300"
-                    }`}>
-                      {statusLabel}
-                    </span>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Prioridade</p>
+                    <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">
+                      Título
+                    </p>
                     <div className="flex items-center gap-2">
-                      {getPrioridadeIcon(atividade.prioridade) ? (
-                        <>
+                      {getPrioridadeIcon(atividade.prioridade) && (
+                        <div className="flex-shrink-0">
                           {getPrioridadeIcon(atividade.prioridade)}
-                          <span className="text-base text-gray-900 dark:text-white">
-                            {atividade.prioridade === "urgente" ? "Urgente" :
-                             atividade.prioridade === "normal" ? "Normal" :
-                             "Baixo"}
-                          </span>
-                        </>
-                      ) : (
-                        <span className="text-base text-gray-500 dark:text-gray-400">Não definida</span>
+                        </div>
                       )}
+                      <p className="text-base text-gray-900 dark:text-white font-semibold">
+                        {atividade.titulo}
+                      </p>
                     </div>
                   </div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Horas Estimadas</p>
-                    <p className="text-base text-gray-900 dark:text-white">{atividade.horasAtuacao}h</p>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">
+                        Data de Início
+                      </p>
+                      <p className="text-base text-gray-900 dark:text-white">
+                        {formatDate(atividade.dataInicio)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">
+                        Término Estimado
+                      </p>
+                      <p className="text-base text-gray-900 dark:text-white">
+                        {formatDate(atividade.dataFimEstimada)}
+                      </p>
+                    </div>
                   </div>
+
+                  <div className="grid grid-cols-3 gap-4">
+                    <div>
+                      <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">
+                        Status
+                      </p>
+                      <span
+                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                          atividade.status === "concluida"
+                            ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
+                            : atividade.status === "em_execucao"
+                              ? "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400"
+                              : "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300"
+                        }`}
+                      >
+                        {statusLabel}
+                      </span>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">
+                        Prioridade
+                      </p>
+                      <div className="flex items-center gap-2">
+                        {getPrioridadeIcon(atividade.prioridade) ? (
+                          <>
+                            {getPrioridadeIcon(atividade.prioridade)}
+                            <span className="text-base text-gray-900 dark:text-white">
+                              {atividade.prioridade === "urgente"
+                                ? "Urgente"
+                                : atividade.prioridade === "normal"
+                                  ? "Normal"
+                                  : "Baixo"}
+                            </span>
+                          </>
+                        ) : (
+                          <span className="text-base text-gray-500 dark:text-gray-400">
+                            Não definida
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">
+                        Horas Estimadas
+                      </p>
+                      <p className="text-base text-gray-900 dark:text-white">
+                        {atividade.horasAtuacao}h
+                      </p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">
+                      Horas Utilizadas
+                    </p>
+                    <p className="text-base text-gray-900 dark:text-white">
+                      {atividade.horasUtilizadas || 0}h
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">
+                      Custo da Tarefa
+                    </p>
+                    <p className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">
+                      {formatCurrency(atividade.custoTarefa)}
+                    </p>
+                  </div>
+
+                  {atividade.descricao && (
+                    <div>
+                      <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">
+                        Descrição
+                      </p>
+                      <p className="text-base text-gray-900 dark:text-white whitespace-pre-wrap">
+                        {atividade.descricao}
+                      </p>
+                    </div>
+                  )}
+
+                  {!atividade.descricao && (
+                    <div>
+                      <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">
+                        Descrição
+                      </p>
+                      <p className="text-base text-gray-500 dark:text-gray-400 italic">
+                        Nenhuma descrição adicional
+                      </p>
+                    </div>
+                  )}
                 </div>
 
-                <div>
-                  <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Horas Utilizadas</p>
-                  <p className="text-base text-gray-900 dark:text-white">{atividade.horasUtilizadas || 0}h</p>
+                <div className="flex items-center justify-end gap-3 mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
+                  <button
+                    onClick={() => setSelectedActivityId(null)}
+                    className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600"
+                  >
+                    Fechar
+                  </button>
+                  <Link
+                    href={`/dashboard/projetos/${projetoId}/atividades/${atividade.id}/editar`}
+                    className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700"
+                    onClick={() => setSelectedActivityId(null)}
+                  >
+                    Editar Atividade
+                  </Link>
                 </div>
-
-                <div>
-                  <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Custo da Tarefa</p>
-                  <p className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">{formatCurrency(atividade.custoTarefa)}</p>
-                </div>
-
-                {atividade.descricao && (
-                  <div>
-                    <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">Descrição</p>
-                    <p className="text-base text-gray-900 dark:text-white whitespace-pre-wrap">{atividade.descricao}</p>
-                  </div>
-                )}
-
-                {!atividade.descricao && (
-                  <div>
-                    <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">Descrição</p>
-                    <p className="text-base text-gray-500 dark:text-gray-400 italic">Nenhuma descrição adicional</p>
-                  </div>
-                )}
-              </div>
-
-              <div className="flex items-center justify-end gap-3 mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
-                <button
-                  onClick={() => setSelectedActivityId(null)}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600"
-                >
-                  Fechar
-                </button>
-                <Link
-                  href={`/dashboard/projetos/${projetoId}/atividades/${atividade.id}/editar`}
-                  className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700"
-                  onClick={() => setSelectedActivityId(null)}
-                >
-                  Editar Atividade
-                </Link>
               </div>
             </div>
-          </div>
-        );
-      })()}
+          );
+        })()}
     </div>
   );
 }
