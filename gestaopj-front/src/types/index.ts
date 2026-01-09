@@ -175,7 +175,8 @@ export interface OrcamentoEntregavel {
 }
 
 export interface OrcamentoItem {
-  atividadeId: string;
+  titulo: string;
+  horasEstimadas: number;
   ordem?: number;
   entregavelId?: string;
   inicioOverride?: string; // ISO date
@@ -198,6 +199,21 @@ export interface Orcamento {
   mostrarSubtotaisPorEntregavel: boolean;
   mostrarDatasCronograma?: boolean; // Se true, exibe colunas de início e término do cronograma
   entregaveis?: OrcamentoEntregavel[];
+  status: "aberto" | "aprovado";
+  aprovadoPor?: string; // userId do aprovador
+  aprovadoEm?: string; // ISO date
+  /**
+   * Valor por hora usado para calcular custo das tarefas (opcional).
+   * Se informado, calcula custo = horasEstimadas * valorHora.
+   * Se não informado, deve informar custoTotal.
+   */
+  valorHora?: number;
+  /**
+   * Custo total do orçamento (opcional).
+   * Se informado, o custo da tarefa será exibido como "-".
+   * Se não informado, deve informar valorHora.
+   */
+  custoTotal?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -213,6 +229,19 @@ export interface CreateOrcamentoDTO {
   mostrarSubtotaisPorEntregavel: boolean;
   mostrarDatasCronograma?: boolean; // Se true, exibe colunas de início e término do cronograma
   entregaveis?: OrcamentoEntregavel[];
+  status?: "aberto" | "aprovado"; // Padrão: "aberto"
+  /**
+   * Valor por hora usado para calcular custo das tarefas (opcional).
+   * Se informado, calcula custo = horasEstimadas * valorHora.
+   * Se não informado, deve informar custoTotal.
+   */
+  valorHora?: number;
+  /**
+   * Custo total do orçamento (opcional).
+   * Se informado, o custo da tarefa será exibido como "-".
+   * Se não informado, deve informar valorHora.
+   */
+  custoTotal?: number;
 }
 
 export type StatusFatura = "pendente" | "pago" | "cancelado" | "fatura_gerada";

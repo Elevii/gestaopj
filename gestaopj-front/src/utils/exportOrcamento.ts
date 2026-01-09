@@ -54,8 +54,9 @@ function fieldValue(params: {
   field: OrcamentoCampoAtividade;
   atividade: Atividade;
   projeto: Projeto;
+  orcamento: Orcamento;
 }): string {
-  const { field, atividade, projeto } = params;
+  const { field, atividade, projeto, orcamento } = params;
   switch (field) {
     case "titulo":
       return atividade.titulo;
@@ -68,9 +69,18 @@ function fieldValue(params: {
     case "horasAtuacao":
       return `${atividade.horasAtuacao}h`;
     case "custoTarefa":
+      // Se orçamento tem custoTotal, mostra "-", senão mostra o custo calculado
+      if (orcamento.custoTotal !== undefined) {
+        return "-";
+      }
       return formatCurrency(atividade.custoTarefa);
     case "custoCalculado":
-      return formatCurrency(atividade.horasAtuacao * (projeto.valorHora ?? 0));
+      // Se orçamento tem custoTotal, mostra "-", senão calcula
+      if (orcamento.custoTotal !== undefined) {
+        return "-";
+      }
+      const valorHora = orcamento.valorHora ?? projeto.valorHora ?? 0;
+      return formatCurrency(atividade.horasAtuacao * valorHora);
     case "horasUtilizadas":
       return `${atividade.horasUtilizadas ?? 0}h`;
   }
@@ -81,18 +91,27 @@ function subtotalForEntregavel(params: {
   itens: Orcamento["itens"];
   atividadesById: Map<string, Atividade>;
   projeto: Projeto;
+  orcamento: Orcamento;
 }) {
-  const atividadeIds = params.itens
+  // Filtrar itens do entregável e usar índice para mapear atividades
+  const itensDoEntregavel = params.itens
     .filter((i) => i.entregavelId === params.entregavel.id)
-    .map((i) => i.atividadeId);
+    .sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0));
 
-  const horas = atividadeIds.reduce(
-    (sum, id) => sum + (params.atividadesById.get(id)?.horasAtuacao ?? 0),
+  const horas = itensDoEntregavel.reduce(
+    (sum, item) => sum + item.horasEstimadas,
     0
   );
-  const custoCalculado = horas * (params.projeto.valorHora ?? 0);
-  const custoTarefa = atividadeIds.reduce(
-    (sum, id) => sum + (params.atividadesById.get(id)?.custoTarefa ?? 0),
+  
+  // Se orçamento tem custoTotal, não calcula por entregável (mostra "-")
+  if (params.orcamento.custoTotal !== undefined) {
+    return { horas, custoCalculado: 0, custoTarefa: 0 };
+  }
+  
+  const valorHora = params.orcamento.valorHora ?? params.projeto.valorHora ?? 0;
+  const custoCalculado = horas * valorHora;
+  const custoTarefa = itensDoEntregavel.reduce(
+    (sum, item) => sum + (item.horasEstimadas * valorHora),
     0
   );
 
@@ -110,9 +129,6 @@ export async function exportOrcamentoToPdf(params: {
   const { default: autoTable } = await import("jspdf-autotable");
   const { jsPDF } = jsPDFModule;
 
-  const atividadesById = new Map<string, Atividade>();
-  for (const a of params.atividades) atividadesById.set(a.id, a);
-
   const doc = new jsPDF({ orientation: "portrait", unit: "pt", format: "a4" });
   const marginX = 40;
   let cursorY = 40;
@@ -120,24 +136,65 @@ export async function exportOrcamentoToPdf(params: {
   const itensOrdenados = params.orcamento.itens
     .slice()
     .sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0));
-  const atividadesSelecionadas = itensOrdenados
-    .map((i) => atividadesById.get(i.atividadeId))
-    .filter(Boolean) as Atividade[];
+  
+  // Criar atividades virtuais a partir dos itens do orçamento
+  const atividadesVirtuais: Atividade[] = itensOrdenados.map((item, idx) => {
+    // Tentar encontrar atividade real se existir (para compatibilidade)
+    const atividadeReal = params.atividades.find((a) => 
+      a.titulo === item.titulo && a.horasAtuacao === item.horasEstimadas
+    );
+    
+    if (atividadeReal) {
+      return atividadeReal;
+    }
+    
+    // Criar atividade virtual a partir do item
+    // Se orçamento tem valorHora, calcula custo. Se tem custoTotal, usa 0 (será exibido como "-")
+    const valorHora = params.orcamento.valorHora ?? params.projeto.valorHora ?? 0;
+    const custoTarefa = params.orcamento.custoTotal !== undefined 
+      ? 0 // Será exibido como "-"
+      : item.horasEstimadas * valorHora;
+    return {
+      id: `virt_${idx}`,
+      projetoId: params.orcamento.projetoId,
+      titulo: item.titulo,
+      dataInicio: params.orcamento.dataInicioProjeto,
+      horasAtuacao: item.horasEstimadas,
+      horasUtilizadas: 0,
+      dataFimEstimada: params.orcamento.dataInicioProjeto,
+      custoTarefa,
+      status: "pendente" as const,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+  });
+
+  const atividadesSelecionadas = atividadesVirtuais;
+  const atividadesById = new Map<string, Atividade>();
+  for (const a of atividadesSelecionadas) {
+    atividadesById.set(a.id, a);
+  }
 
   const totalHoras = atividadesSelecionadas.reduce(
     (sum, a) => sum + (a.horasAtuacao ?? 0),
     0
   );
   
-  const totalCustoCalculado = 
-    params.projeto.tipoCobranca === "fixo"
+  // Se orçamento tem custoTotal, usa ele. Senão, calcula baseado no tipo de cobrança do projeto
+  const totalCustoCalculado = params.orcamento.custoTotal !== undefined
+    ? params.orcamento.custoTotal
+    : params.projeto.tipoCobranca === "fixo"
       ? (params.projeto.valorFixo ?? 0)
-      : totalHoras * (params.projeto.valorHora ?? 0);
+      : totalHoras * (params.orcamento.valorHora ?? params.projeto.valorHora ?? 0);
 
-  const totalCustoTarefa = atividadesSelecionadas.reduce(
-    (sum, a) => sum + (a.custoTarefa ?? 0),
-    0
-  );
+  // Se orçamento tem custoTotal, o total de custo tarefa é o custoTotal
+  // Senão, soma os custos das tarefas
+  const totalCustoTarefa = params.orcamento.custoTotal !== undefined
+    ? params.orcamento.custoTotal
+    : atividadesSelecionadas.reduce(
+        (sum, a) => sum + (a.custoTarefa ?? 0),
+        0
+      );
 
   doc.setFontSize(16);
   doc.text(params.orcamento.titulo, marginX, cursorY);
@@ -159,19 +216,34 @@ export async function exportOrcamentoToPdf(params: {
   doc.text(`Empresa: ${params.empresa}`, leftX, cursorY);
   cursorY += 12;
   
-  if (params.projeto.tipoCobranca === "fixo") {
-    doc.text(
-      `Valor do Projeto: ${formatCurrency(params.projeto.valorFixo ?? 0)} | Horas úteis/dia: ${params.projeto.horasUteisPorDia}`,
-      leftX,
-      cursorY
-    );
+  // Determinar valor do projeto baseado no orçamento
+  let valorProjetoTexto: string;
+  let valorHoraTexto: string;
+  
+  if (params.orcamento.custoTotal !== undefined) {
+    // Se tem custoTotal, é valor fixo
+    valorProjetoTexto = `Valor do Projeto: ${formatCurrency(params.orcamento.custoTotal)}`;
+    valorHoraTexto = "";
+  } else if (params.orcamento.valorHora !== undefined) {
+    // Se tem valorHora, calcula soma das tarefas e mostra valor/hora
+    valorProjetoTexto = `Valor do Projeto: ${formatCurrency(totalCustoTarefa)}`;
+    valorHoraTexto = `Valor/hora: ${formatCurrency(params.orcamento.valorHora)}`;
   } else {
-    doc.text(
-      `Valor/hora: ${formatCurrency(params.projeto.valorHora ?? 0)} | Horas úteis/dia: ${params.projeto.horasUteisPorDia}`,
-      leftX,
-      cursorY
-    );
+    // Fallback para valores do projeto
+    if (params.projeto.tipoCobranca === "fixo") {
+      valorProjetoTexto = `Valor do Projeto: ${formatCurrency(params.projeto.valorFixo ?? 0)}`;
+      valorHoraTexto = "";
+    } else {
+      valorProjetoTexto = `Valor do Projeto: ${formatCurrency(totalCustoTarefa)}`;
+      valorHoraTexto = `Valor/hora: ${formatCurrency(params.projeto.valorHora ?? 0)}`;
+    }
   }
+  
+  doc.text(
+    `${valorProjetoTexto}${valorHoraTexto ? ` | ${valorHoraTexto}` : ""} | Horas úteis/dia: ${params.projeto.horasUteisPorDia}`,
+    leftX,
+    cursorY
+  );
 
   // Coluna Direita: Resumo Financeiro
   let rightCursorY = startY;
@@ -182,8 +254,17 @@ export async function exportOrcamentoToPdf(params: {
   doc.text(`Horas estimadas: ${totalHoras}h`, rightX, rightCursorY);
   rightCursorY += 12;
   
+  // Determinar label e valor do resumo baseado no orçamento
+  const labelResumo = params.orcamento.custoTotal !== undefined
+    ? "Valor Total"
+    : params.orcamento.valorHora !== undefined
+      ? "Custo Calculado"
+      : params.projeto.tipoCobranca === "fixo"
+        ? "Valor Total"
+        : "Custo Calculado";
+  
   doc.text(
-    `${params.projeto.tipoCobranca === "fixo" ? "Valor Total" : "Custo Calculado"}: ${formatCurrency(totalCustoCalculado)}`,
+    `${labelResumo}: ${formatCurrency(totalCustoCalculado)}`,
     rightX,
     rightCursorY
   );
@@ -224,12 +305,12 @@ export async function exportOrcamentoToPdf(params: {
   const cronogramaFull = gerarCronogramaSequencial({
     dataInicioProjetoISO: params.orcamento.dataInicioProjeto,
     horasUteisPorDia: params.projeto.horasUteisPorDia,
-    itens: itensOrdenados.map((it) => ({
-      atividadeId: it.atividadeId,
-      horasEstimadas: atividadesById.get(it.atividadeId)?.horasAtuacao ?? 0,
-      inicioOverride: it.inicioOverride,
-      fimOverride: it.fimOverride,
-    })),
+      itens: itensOrdenados.map((it) => ({
+        atividadeId: `item_${itensOrdenados.indexOf(it)}`,
+        horasEstimadas: it.horasEstimadas,
+        inicioOverride: it.inicioOverride,
+        fimOverride: it.fimOverride,
+      })),
   });
 
   // Renderização por entregável (obrigatório agora)
@@ -240,12 +321,12 @@ export async function exportOrcamentoToPdf(params: {
 
     for (const ent of entregaveis) {
       // Filtra itens deste entregável
-      const itensEntregavelIds = itensOrdenados
+      const itensDoEntregavel = itensOrdenados
         .filter((i) => i.entregavelId === ent.id)
-        .map((i) => i.atividadeId);
+        .sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0));
 
       // Se entregável não tem itens e não tem checkpoints, pula (ou exibe vazio se desejar)
-      if (itensEntregavelIds.length === 0 && ent.checkpoints.length === 0)
+      if (itensDoEntregavel.length === 0 && ent.checkpoints.length === 0)
         continue;
 
       if (cursorY > 720) {
@@ -264,23 +345,34 @@ export async function exportOrcamentoToPdf(params: {
         itens: itensOrdenados,
         atividadesById,
         projeto: params.projeto,
+        orcamento: params.orcamento,
       });
 
       doc.setFontSize(10);
+      const custoTexto = params.orcamento.custoTotal !== undefined
+        ? "-"
+        : formatCurrency(subtotal.custoTarefa);
       doc.text(
-        `Horas Estimadas: ${subtotal.horas}h | Custo Estimado: ${formatCurrency(subtotal.custoTarefa)}`,
+        `Horas Estimadas: ${subtotal.horas}h | Custo Estimado: ${custoTexto}`,
         marginX,
         cursorY
       );
       cursorY += 14;
 
       // Tabela de atividades
-      const atividadesDoEntregavel = itensOrdenados
-        .filter((it) => it.entregavelId === ent.id)
-        .map((it) => {
-          const ativ = atividadesById.get(it.atividadeId);
+      const atividadesDoEntregavel = itensDoEntregavel
+        .map((it, idx) => {
+          // Encontrar atividade correspondente pelo índice ou criar virtual
+          const ativ = atividadesSelecionadas.find((a, aIdx) => {
+            const itemOriginal = itensOrdenados.find((orig, origIdx) => origIdx === aIdx);
+            return itemOriginal && itemOriginal.titulo === it.titulo && itemOriginal.horasEstimadas === it.horasEstimadas;
+          }) || atividadesSelecionadas[itensOrdenados.indexOf(it)];
+          
           const crono = cronogramaFull.find(
-            (c) => c.atividadeId === it.atividadeId
+            (c, cIdx) => {
+              const itemCrono = itensOrdenados[cIdx];
+              return itemCrono && itemCrono.titulo === it.titulo && itemCrono.horasEstimadas === it.horasEstimadas;
+            }
           );
           return { ativ, crono };
         })
@@ -303,7 +395,7 @@ export async function exportOrcamentoToPdf(params: {
         const body = atividadesDoEntregavel.map(({ ativ, crono }) => {
           if (!ativ) return [];
           const rowData = cols.map((field) =>
-            fieldValue({ field, atividade: ativ, projeto: params.projeto })
+            fieldValue({ field, atividade: ativ, projeto: params.projeto, orcamento: params.orcamento })
           );
           return [
             ...rowData,

@@ -36,13 +36,21 @@ export default function OrcamentosPage() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-          Orçamentos
-        </h1>
-        <p className="mt-2 text-gray-600 dark:text-gray-400">
-          Crie orçamentos de projetos e exporte em PDF
-        </p>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+            Orçamentos
+          </h1>
+          <p className="mt-2 text-gray-600 dark:text-gray-400">
+            Crie orçamentos de projetos e exporte em PDF
+          </p>
+        </div>
+        <Link
+          href="/dashboard/orcamentos/novo"
+          className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700"
+        >
+          Novo Orçamento
+        </Link>
       </div>
 
       {loading ? (
@@ -68,7 +76,7 @@ export default function OrcamentosPage() {
               </svg>
             }
             title="Nenhum orçamento criado"
-            description="Crie seu primeiro orçamento selecionando atividades e configurando quais dados serão exibidos."
+            description="Crie seu primeiro orçamento adicionando atividades e configurando quais dados serão exibidos."
             action={{
               label: "Novo Orçamento",
               href: "/dashboard/orcamentos/novo",
@@ -86,6 +94,12 @@ export default function OrcamentosPage() {
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                     Projeto
+                  </th>
+                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    Atividades
+                  </th>
+                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    Status
                   </th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                     Ações
@@ -116,6 +130,22 @@ export default function OrcamentosPage() {
                             {proj?.empresa ?? ""}
                           </div>
                         </td>
+                        <td className="px-6 py-4 text-center">
+                          <span className="text-sm text-gray-900 dark:text-white">
+                            {o.itens.length}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          <span
+                            className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
+                              o.status === "aprovado"
+                                ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300"
+                                : "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300"
+                            }`}
+                          >
+                            {o.status === "aprovado" ? "Aprovado" : "Aberto"}
+                          </span>
+                        </td>
                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                           <div className="flex items-center justify-end gap-3">
                             <Link
@@ -125,7 +155,11 @@ export default function OrcamentosPage() {
                               Abrir
                             </Link>
                             <button
-                              onClick={() => deleteOrcamento(o.id)}
+                              onClick={() => {
+                                if (confirm("Tem certeza que deseja excluir este orçamento?")) {
+                                  deleteOrcamento(o.id);
+                                }
+                              }}
                               className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
                             >
                               Excluir
@@ -152,5 +186,3 @@ export default function OrcamentosPage() {
     </div>
   );
 }
-
-

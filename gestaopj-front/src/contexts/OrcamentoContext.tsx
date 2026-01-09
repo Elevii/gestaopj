@@ -11,6 +11,7 @@ import {
 import { CreateOrcamentoDTO, Orcamento } from "@/types";
 import { orcamentoService } from "@/services/orcamentoService";
 import { useCompany } from "@/contexts/CompanyContext";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface OrcamentoContextType {
   orcamentos: Orcamento[];
@@ -19,6 +20,7 @@ interface OrcamentoContextType {
   createOrcamento: (data: CreateOrcamentoDTO) => Promise<Orcamento>;
   updateOrcamento: (id: string, data: Partial<CreateOrcamentoDTO>) => Promise<Orcamento>;
   deleteOrcamento: (id: string) => Promise<void>;
+  approveOrcamento: (id: string) => Promise<Orcamento>;
   getOrcamentoById: (id: string) => Orcamento | undefined;
 }
 
@@ -28,6 +30,7 @@ export function OrcamentoProvider({ children }: { children: ReactNode }) {
   const [orcamentos, setOrcamentos] = useState<Orcamento[]>([]);
   const [loading, setLoading] = useState(true);
   const { company } = useCompany();
+  const { user } = useAuth();
 
   const refreshOrcamentos = useCallback(async () => {
     try {
@@ -65,6 +68,16 @@ export function OrcamentoProvider({ children }: { children: ReactNode }) {
     setOrcamentos(all);
   }, []);
 
+  const approveOrcamento = useCallback(async (id: string) => {
+    if (!user) {
+      throw new Error("Usuário não autenticado");
+    }
+    const approved = await orcamentoService.approveOrcamento(id, user.id);
+    const all = await orcamentoService.findAll();
+    setOrcamentos(all);
+    return approved;
+  }, [user]);
+
   const getOrcamentoById = useCallback(
     (id: string) => orcamentos.find((o) => o.id === id),
     [orcamentos]
@@ -79,6 +92,7 @@ export function OrcamentoProvider({ children }: { children: ReactNode }) {
         createOrcamento,
         updateOrcamento,
         deleteOrcamento,
+        approveOrcamento,
         getOrcamentoById,
       }}
     >

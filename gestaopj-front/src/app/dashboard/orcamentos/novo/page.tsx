@@ -4,7 +4,6 @@ import { useMemo, useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useProjetos } from "@/contexts/ProjetoContext";
-import { useAtividades } from "@/contexts/AtividadeContext";
 import { useOrcamentos } from "@/contexts/OrcamentoContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCompany } from "@/contexts/CompanyContext";
@@ -17,6 +16,12 @@ import {
   formatTodayISODateLocal,
   gerarCronogramaSequencial,
 } from "@/utils/estimativas";
+
+interface AtividadeOrcamento {
+  id: string;
+  titulo: string;
+  horasEstimadas: number;
+}
 
 export default function NovoOrcamentoPage() {
   const router = useRouter();
@@ -32,7 +37,6 @@ export default function NovoOrcamentoPage() {
     }
   }, [company, userCompanies, router]);
   const { projetos } = useProjetos();
-  const { atividades } = useAtividades();
   const { createOrcamento } = useOrcamentos();
 
   const [saving, setSaving] = useState(false);
@@ -59,22 +63,22 @@ export default function NovoOrcamentoPage() {
       "horasAtuacao",
       "custoTarefa",
     ] as OrcamentoCampoAtividade[],
-    atividadeIds: [] as string[],
     usarEntregaveis: true,
     mostrarSubtotaisPorEntregavel: true,
-    mostrarDatasCronograma: true, // Por padrão, mostra as datas
+    mostrarDatasCronograma: true,
     introText: "",
+    tipoCalculo: "valorHora" as "valorHora" | "custoTotal",
+    valorHora: undefined as number | undefined,
+    custoTotal: undefined as number | undefined,
   });
+
+  const [atividadesOrcamento, setAtividadesOrcamento] = useState<AtividadeOrcamento[]>([]);
+  const [novaAtividade, setNovaAtividade] = useState({ titulo: "", horasEstimadas: "" });
 
   const projeto = useMemo(
     () => projetos.find((p) => p.id === form.projetoId),
     [form.projetoId, projetos]
   );
-
-  const atividadesDoProjeto = useMemo(() => {
-    if (!form.projetoId) return [];
-    return atividades.filter((a) => a.projetoId === form.projetoId);
-  }, [atividades, form.projetoId]);
 
   const [itemMeta, setItemMeta] = useState<
     Record<
@@ -93,14 +97,15 @@ export default function NovoOrcamentoPage() {
   ]);
 
   const itens: OrcamentoItem[] = useMemo(() => {
-    return form.atividadeIds.map((atividadeId, idx) => ({
-      atividadeId,
+    return atividadesOrcamento.map((atividade, idx) => ({
+      titulo: atividade.titulo,
+      horasEstimadas: atividade.horasEstimadas,
       ordem: idx,
-      entregavelId: itemMeta[atividadeId]?.entregavelId || entregaveis[0]?.id, // Default to first deliverable
-      inicioOverride: itemMeta[atividadeId]?.inicioOverride,
-      fimOverride: itemMeta[atividadeId]?.fimOverride,
+      entregavelId: itemMeta[atividade.id]?.entregavelId || entregaveis[0]?.id,
+      inicioOverride: itemMeta[atividade.id]?.inicioOverride,
+      fimOverride: itemMeta[atividade.id]?.fimOverride,
     }));
-  }, [form.atividadeIds, itemMeta, entregaveis]);
+  }, [atividadesOrcamento, itemMeta, entregaveis]);
 
   const cronogramaPreview = useMemo(() => {
     if (!projeto) return [];
@@ -109,17 +114,14 @@ export default function NovoOrcamentoPage() {
     return gerarCronogramaSequencial({
       dataInicioProjetoISO: form.dataInicioProjeto,
       horasUteisPorDia: projeto.horasUteisPorDia,
-      itens: itens.map((it) => {
-        const a = atividadesDoProjeto.find((x) => x.id === it.atividadeId);
-        return {
-          atividadeId: it.atividadeId,
-          horasEstimadas: a?.horasAtuacao ?? 0,
-          inicioOverride: it.inicioOverride,
-          fimOverride: it.fimOverride,
-        };
-      }),
+      itens: itens.map((it, idx) => ({
+        atividadeId: atividadesOrcamento[idx]?.id || `temp_${idx}`,
+        horasEstimadas: it.horasEstimadas,
+        inicioOverride: it.inicioOverride,
+        fimOverride: it.fimOverride,
+      })),
     });
-  }, [atividadesDoProjeto, form.dataInicioProjeto, itens, projeto]);
+  }, [atividadesOrcamento, form.dataInicioProjeto, itens, projeto]);
 
   const addEntregavel = () => {
     const ordem = entregaveis.length;
@@ -135,15 +137,12 @@ export default function NovoOrcamentoPage() {
   };
 
   const removeEntregavel = (id: string) => {
-    // Não permite remover se for o único
     if (entregaveis.length <= 1) return;
 
     setEntregaveis((prev) => {
       const filtered = prev.filter((e) => e.id !== id);
-      // Re-ordena e reatribui itens órfãos para o primeiro disponível
       const firstId = filtered[0].id;
 
-      // Atualiza metadados dos itens que estavam no entregável removido
       setItemMeta((meta) => {
         const newMeta = { ...meta };
         Object.keys(newMeta).forEach((key) => {
@@ -178,15 +177,41 @@ export default function NovoOrcamentoPage() {
     );
   };
 
-  const toggleAtividade = (atividadeId: string) => {
-    setForm((prev) => {
-      const exists = prev.atividadeIds.includes(atividadeId);
-      return {
-        ...prev,
-        atividadeIds: exists
-          ? prev.atividadeIds.filter((id) => id !== atividadeId)
-          : [...prev.atividadeIds, atividadeId],
-      };
+  const adicionarAtividade = () => {
+    const titulo = novaAtividade.titulo.trim();
+    const horas = parseFloat(novaAtividade.horasEstimadas);
+
+    if (!titulo) {
+      setErrors((prev) => ({ ...prev, novaAtividade: "Título é obrigatório" }));
+      return;
+    }
+
+    if (isNaN(horas) || horas <= 0) {
+      setErrors((prev) => ({ ...prev, novaAtividade: "Horas estimadas deve ser maior que zero" }));
+      return;
+    }
+
+    setAtividadesOrcamento((prev) => [
+      ...prev,
+      {
+        id: `ativ_temp_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        titulo,
+        horasEstimadas: horas,
+      },
+    ]);
+
+    setNovaAtividade({ titulo: "", horasEstimadas: "" });
+    setErrors((prev) => {
+      const { novaAtividade: _, ...rest } = prev;
+      return rest;
+    });
+  };
+
+  const removerAtividade = (id: string) => {
+    setAtividadesOrcamento((prev) => prev.filter((a) => a.id !== id));
+    setItemMeta((prev) => {
+      const { [id]: _, ...rest } = prev;
+      return rest;
     });
   };
 
@@ -195,10 +220,16 @@ export default function NovoOrcamentoPage() {
     const nextErrors: Record<string, string> = {};
     if (!form.projetoId) nextErrors.projetoId = "Projeto é obrigatório";
     if (!form.titulo.trim()) nextErrors.titulo = "Título é obrigatório";
-    if (form.atividadeIds.length === 0)
-      nextErrors.atividadeIds = "Selecione ao menos uma atividade";
+    if (atividadesOrcamento.length === 0)
+      nextErrors.atividades = "Adicione ao menos uma atividade";
     if (form.camposSelecionados.length === 0)
       nextErrors.camposSelecionados = "Selecione ao menos um campo";
+    if (form.tipoCalculo === "valorHora" && (!form.valorHora || form.valorHora <= 0)) {
+      nextErrors.valorHora = "Valor por hora é obrigatório e deve ser maior que zero";
+    }
+    if (form.tipoCalculo === "custoTotal" && (!form.custoTotal || form.custoTotal <= 0)) {
+      nextErrors.custoTotal = "Custo total é obrigatório e deve ser maior que zero";
+    }
     if (Object.keys(nextErrors).length > 0) {
       setErrors(nextErrors);
       return;
@@ -219,6 +250,9 @@ export default function NovoOrcamentoPage() {
         mostrarDatasCronograma: form.mostrarDatasCronograma,
         entregaveis: form.usarEntregaveis ? entregaveis : undefined,
         observacoes: form.introText,
+        status: "aberto" as const,
+        valorHora: form.tipoCalculo === "valorHora" ? form.valorHora : undefined,
+        custoTotal: form.tipoCalculo === "custoTotal" ? form.custoTotal : undefined,
       };
       const novo = await createOrcamento(data);
       router.push(`/dashboard/orcamentos/${novo.id}`);
@@ -256,7 +290,7 @@ export default function NovoOrcamentoPage() {
           Novo Orçamento
         </h1>
         <p className="mt-2 text-gray-600 dark:text-gray-400">
-          Configure um orçamento para um projeto e exporte em PDF
+          Crie um orçamento adicionando atividades diretamente
         </p>
       </div>
 
@@ -277,7 +311,6 @@ export default function NovoOrcamentoPage() {
               setForm((p) => ({
                 ...p,
                 projetoId: e.target.value,
-                atividadeIds: [],
               }))
             }
             className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors dark:bg-gray-700 dark:border-gray-600 dark:text-white ${
@@ -337,465 +370,616 @@ export default function NovoOrcamentoPage() {
               <p className="text-xs text-right text-gray-500 dark:text-gray-400 mt-1">
                 {form.introText.length}/1000
               </p>
-            </div>
-          </>
-        )}
 
-        {form.projetoId && (
-          <>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="space-y-4">
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Atividades <span className="text-red-500">*</span>
+              <div className="mt-4 space-y-3">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Cálculo de Custo
                 </label>
-                <span className="text-xs text-gray-500 dark:text-gray-400">
-                  {form.atividadeIds.length} selecionada(s)
-                </span>
-              </div>
-              {!form.projetoId ? (
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Selecione um projeto para listar as atividades.
-                </p>
-              ) : (
-                <div
-                  className={`rounded-lg border border-gray-200 dark:border-gray-700 divide-y divide-gray-200 dark:divide-gray-700`}
-                >
-                  {atividadesDoProjeto.map((a) => (
-                    <label
-                      key={a.id}
-                      className="flex items-start gap-3 p-3 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={form.atividadeIds.includes(a.id)}
-                        onChange={() => toggleAtividade(a.id)}
-                        className="mt-1"
-                      />
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
-                          {a.titulo}
-                        </p>
-                        <p className="text-xs text-gray-500 dark:text-gray-400">
-                          {a.horasAtuacao}h estimadas • status: {a.status}
-                        </p>
-                      </div>
-                    </label>
-                  ))}
-                  {atividadesDoProjeto.length === 0 && (
-                    <div className="p-3 text-sm text-gray-600 dark:text-gray-400">
-                      Nenhuma atividade no projeto.
-                    </div>
-                  )}
-                </div>
-              )}
-              {errors.atividadeIds && (
-                <p className="mt-1 text-sm text-red-600 dark:text-red-400">
-                  {errors.atividadeIds}
-                </p>
-              )}
-            </div>
-
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Campos do orçamento <span className="text-red-500">*</span>
-                </label>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {camposDisponiveis.map((c) => (
-                  <label
-                    key={c.key}
-                    className="flex items-start gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer"
-                  >
+                <div className="flex gap-4">
+                  <label className="flex items-center gap-2 cursor-pointer">
                     <input
-                      type="checkbox"
-                      checked={form.camposSelecionados.includes(c.key)}
-                      onChange={() =>
-                        setForm((prev) => {
-                          const has = prev.camposSelecionados.includes(c.key);
-                          return {
-                            ...prev,
-                            camposSelecionados: has
-                              ? prev.camposSelecionados.filter(
-                                  (x) => x !== c.key
-                                )
-                              : [...prev.camposSelecionados, c.key],
-                          };
-                        })
+                      type="radio"
+                      name="tipoCalculo"
+                      value="valorHora"
+                      checked={form.tipoCalculo === "valorHora"}
+                      onChange={(e) =>
+                        setForm((p) => ({
+                          ...p,
+                          tipoCalculo: "valorHora",
+                          custoTotal: undefined,
+                        }))
                       }
-                      className="mt-1"
+                      className="w-4 h-4"
                     />
-                    <span className="text-sm text-gray-900 dark:text-white">
-                      {c.label}
+                    <span className="text-sm text-gray-700 dark:text-gray-300">
+                      Valor por hora
                     </span>
                   </label>
-                ))}
-              </div>
-              {errors.camposSelecionados && (
-                <p className="mt-1 text-sm text-red-600 dark:text-red-400">
-                  {errors.camposSelecionados}
-                </p>
-              )}
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            <div className="rounded-xl border border-gray-200 dark:border-gray-700 p-4">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-sm font-medium text-gray-900 dark:text-white">
-                    Cronograma (preview)
-                  </p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                    Sequencial por dias úteis, com possibilidade de override por
-                    atividade (em breve).
-                  </p>
-                </div>
-                <div className="w-44">
-                  <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
-                    Início do cronograma
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="tipoCalculo"
+                      value="custoTotal"
+                      checked={form.tipoCalculo === "custoTotal"}
+                      onChange={(e) =>
+                        setForm((p) => ({
+                          ...p,
+                          tipoCalculo: "custoTotal",
+                          valorHora: undefined,
+                        }))
+                      }
+                      className="w-4 h-4"
+                    />
+                    <span className="text-sm text-gray-700 dark:text-gray-300">
+                      Custo total
+                    </span>
                   </label>
-                  <input
-                    type="date"
-                    value={form.dataInicioProjeto}
-                    onChange={(e) =>
-                      setForm((p) => ({
-                        ...p,
-                        dataInicioProjeto: e.target.value,
-                      }))
-                    }
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
-                  />
+                </div>
+
+                {form.tipoCalculo === "valorHora" ? (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Valor por hora (R$)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={form.valorHora ?? ""}
+                      onChange={(e) =>
+                        setForm((p) => ({
+                          ...p,
+                          valorHora: e.target.value ? parseFloat(e.target.value) : undefined,
+                        }))
+                      }
+                      className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors dark:bg-gray-700 dark:text-white ${
+                        errors.valorHora ? "border-red-500" : "border-gray-300 dark:border-gray-600"
+                      }`}
+                      placeholder="0.00"
+                    />
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      O custo de cada tarefa será calculado como: horas estimadas × valor/hora
+                    </p>
+                    {errors.valorHora && (
+                      <p className="text-xs text-red-600 dark:text-red-400 mt-1">
+                        {errors.valorHora}
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Custo Total (R$)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={form.custoTotal ?? ""}
+                      onChange={(e) =>
+                        setForm((p) => ({
+                          ...p,
+                          custoTotal: e.target.value ? parseFloat(e.target.value) : undefined,
+                        }))
+                      }
+                      className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors dark:bg-gray-700 dark:text-white ${
+                        errors.custoTotal ? "border-red-500" : "border-gray-300 dark:border-gray-600"
+                      }`}
+                      placeholder="0.00"
+                    />
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      O custo de cada tarefa será exibido como "-"
+                    </p>
+                    {errors.custoTotal && (
+                      <p className="text-xs text-red-600 dark:text-red-400 mt-1">
+                        {errors.custoTotal}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="space-y-4">
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Atividades <span className="text-red-500">*</span>
+                    </label>
+                    <span className="text-xs text-gray-500 dark:text-gray-400">
+                      {atividadesOrcamento.length} adicionada(s)
+                    </span>
+                  </div>
+
+                  <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4 space-y-3">
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={novaAtividade.titulo}
+                        onChange={(e) =>
+                          setNovaAtividade((prev) => ({
+                            ...prev,
+                            titulo: e.target.value,
+                          }))
+                        }
+                        placeholder="Título da atividade"
+                        className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm"
+                        onKeyPress={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            adicionarAtividade();
+                          }
+                        }}
+                      />
+                      <input
+                        type="number"
+                        value={novaAtividade.horasEstimadas}
+                        onChange={(e) =>
+                          setNovaAtividade((prev) => ({
+                            ...prev,
+                            horasEstimadas: e.target.value,
+                          }))
+                        }
+                        placeholder="Horas"
+                        min="0.1"
+                        step="0.1"
+                        className="w-24 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm"
+                        onKeyPress={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            adicionarAtividade();
+                          }
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={adicionarAtividade}
+                        className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700"
+                      >
+                        Adicionar
+                      </button>
+                    </div>
+                    {errors.novaAtividade && (
+                      <p className="text-xs text-red-600 dark:text-red-400">
+                        {errors.novaAtividade}
+                      </p>
+                    )}
+
+                    <div className="space-y-2 max-h-64 overflow-y-auto">
+                      {atividadesOrcamento.map((atividade) => (
+                        <div
+                          key={atividade.id}
+                          className="flex items-center justify-between p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50"
+                        >
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                              {atividade.titulo}
+                            </p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                              {atividade.horasEstimadas}h estimadas
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => removerAtividade(atividade.id)}
+                            className="ml-3 text-red-600 hover:text-red-800 dark:text-red-400 p-1"
+                            title="Remover atividade"
+                          >
+                            <svg
+                              className="w-5 h-5"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                              />
+                            </svg>
+                          </button>
+                        </div>
+                      ))}
+                      {atividadesOrcamento.length === 0 && (
+                        <p className="text-sm text-gray-600 dark:text-gray-400 text-center py-4">
+                          Nenhuma atividade adicionada. Adicione atividades acima.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  {errors.atividades && (
+                    <p className="mt-1 text-sm text-red-600 dark:text-red-400">
+                      {errors.atividades}
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Campos do orçamento <span className="text-red-500">*</span>
+                    </label>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {camposDisponiveis.map((c) => (
+                      <label
+                        key={c.key}
+                        className="flex items-start gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={form.camposSelecionados.includes(c.key)}
+                          onChange={() =>
+                            setForm((prev) => {
+                              const has = prev.camposSelecionados.includes(c.key);
+                              return {
+                                ...prev,
+                                camposSelecionados: has
+                                  ? prev.camposSelecionados.filter(
+                                      (x) => x !== c.key
+                                    )
+                                  : [...prev.camposSelecionados, c.key],
+                              };
+                            })
+                          }
+                          className="mt-1"
+                        />
+                        <span className="text-sm text-gray-900 dark:text-white">
+                          {c.label}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                  {errors.camposSelecionados && (
+                    <p className="mt-1 text-sm text-red-600 dark:text-red-400">
+                      {errors.camposSelecionados}
+                    </p>
+                  )}
                 </div>
               </div>
 
-              <div className="mt-4 overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                  <thead className="bg-gray-50 dark:bg-gray-900">
-                    <tr>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
-                        Atividade
-                      </th>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
-                        Início
-                      </th>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
-                        Fim
-                      </th>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
-                        Alterar datas
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                    {cronogramaPreview.map((c) => {
-                      const a = atividadesDoProjeto.find(
-                        (x) => x.id === c.atividadeId
-                      );
-                      return (
-                        <tr key={c.atividadeId}>
-                          <td className="px-3 py-2 text-sm text-gray-900 dark:text-white">
-                            {a?.titulo ?? c.atividadeId}
-                          </td>
-                          <td className="px-3 py-2 text-sm text-gray-600 dark:text-gray-300">
-                            {c.inicio}
-                          </td>
-                          <td className="px-3 py-2 text-sm text-gray-600 dark:text-gray-300">
-                            {c.fim}
-                          </td>
-                          <td className="px-3 py-2">
-                            <div className="flex items-center gap-2">
+              <div className="space-y-4">
+                <div className="rounded-xl border border-gray-200 dark:border-gray-700 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-medium text-gray-900 dark:text-white">
+                        Cronograma (preview)
+                      </p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        Sequencial por dias úteis, com possibilidade de override por
+                        atividade.
+                      </p>
+                    </div>
+                    <div className="w-44">
+                      <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
+                        Início do cronograma
+                      </label>
+                      <input
+                        type="date"
+                        value={form.dataInicioProjeto}
+                        onChange={(e) =>
+                          setForm((p) => ({
+                            ...p,
+                            dataInicioProjeto: e.target.value,
+                          }))
+                        }
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="mt-4 overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                      <thead className="bg-gray-50 dark:bg-gray-900">
+                        <tr>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                            Atividade
+                          </th>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                            Início
+                          </th>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                            Fim
+                          </th>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                            Alterar datas
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                        {cronogramaPreview.map((c, idx) => {
+                          const atividade = atividadesOrcamento[idx];
+                          return (
+                            <tr key={atividade?.id || idx}>
+                              <td className="px-3 py-2 text-sm text-gray-900 dark:text-white">
+                                {atividade?.titulo ?? "-"}
+                              </td>
+                              <td className="px-3 py-2 text-sm text-gray-600 dark:text-gray-300">
+                                {c.inicio}
+                              </td>
+                              <td className="px-3 py-2 text-sm text-gray-600 dark:text-gray-300">
+                                {c.fim}
+                              </td>
+                              <td className="px-3 py-2">
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    type="date"
+                                    value={
+                                      itemMeta[atividade?.id || ""]?.inicioOverride ?? ""
+                                    }
+                                    onChange={(e) =>
+                                      setItemMeta((prev) => ({
+                                        ...prev,
+                                        [atividade?.id || ""]: {
+                                          ...prev[atividade?.id || ""],
+                                          inicioOverride:
+                                            e.target.value || undefined,
+                                        },
+                                      }))
+                                    }
+                                    className="w-36 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm"
+                                  />
+                                  <input
+                                    type="date"
+                                    value={
+                                      itemMeta[atividade?.id || ""]?.fimOverride ?? ""
+                                    }
+                                    onChange={(e) =>
+                                      setItemMeta((prev) => ({
+                                        ...prev,
+                                        [atividade?.id || ""]: {
+                                          ...prev[atividade?.id || ""],
+                                          fimOverride: e.target.value || undefined,
+                                        },
+                                      }))
+                                    }
+                                    className="w-36 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setItemMeta((prev) => {
+                                        const { [atividade?.id || ""]: _, ...rest } = prev;
+                                        return rest;
+                                      })
+                                    }
+                                    className="text-xs text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white"
+                                  >
+                                    limpar
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                        {cronogramaPreview.length === 0 && (
+                          <tr>
+                            <td
+                              className="px-3 py-3 text-sm text-gray-600 dark:text-gray-400"
+                              colSpan={4}
+                            >
+                              Adicione atividades para ver o cronograma.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-gray-200 dark:border-gray-700 p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-900 dark:text-white">
+                        Etapas / Entregas Planejadas
+                      </p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        Organize o orçamento em etapas. Sempre haverá pelo menos
+                        uma etapa padrão.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <label className="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                      <input
+                        type="checkbox"
+                        checked={form.mostrarSubtotaisPorEntregavel}
+                        onChange={(e) =>
+                          setForm((p) => ({
+                            ...p,
+                            mostrarSubtotaisPorEntregavel: e.target.checked,
+                          }))
+                        }
+                      />
+                      Mostrar subtotais por etapa no PDF
+                    </label>
+
+                    <label className="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                      <input
+                        type="checkbox"
+                        checked={form.mostrarDatasCronograma}
+                        onChange={(e) =>
+                          setForm((p) => ({
+                            ...p,
+                            mostrarDatasCronograma: e.target.checked,
+                          }))
+                        }
+                      />
+                      Exibir colunas de data de início e término no PDF
+                    </label>
+
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                        Etapas: {entregaveis.length}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={addEntregavel}
+                        className="px-3 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700"
+                      >
+                        Adicionar etapa
+                      </button>
+                    </div>
+
+                    {entregaveis.map((e) => (
+                      <div
+                        key={e.id}
+                        className="rounded-lg border border-gray-200 dark:border-gray-700 p-3"
+                      >
+                        <div className="flex items-center justify-between gap-2 mb-2">
+                          <input
+                            value={e.titulo}
+                            onChange={(ev) =>
+                              setEntregaveis((prev) =>
+                                prev.map((x) =>
+                                  x.id === e.id
+                                    ? { ...x, titulo: ev.target.value }
+                                    : x
+                                )
+                              )
+                            }
+                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
+                            placeholder="Nome da etapa"
+                          />
+                          {entregaveis.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => removeEntregavel(e.id)}
+                              className="text-red-600 hover:text-red-800 dark:text-red-400 p-2"
+                              title="Remover etapa"
+                            >
+                              <svg
+                                className="w-5 h-5"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                />
+                              </svg>
+                            </button>
+                          )}
+                        </div>
+
+                        <div className="mt-3 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                              (Opcional) Entregas Planejadas: {e.checkpoints.length}
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => addCheckpoint(e.id)}
+                              className="text-xs font-medium text-indigo-600 hover:text-indigo-700 dark:text-indigo-400"
+                            >
+                              Adicionar entrega
+                            </button>
+                          </div>
+
+                          {e.checkpoints.map((c) => (
+                            <div
+                              key={c.id}
+                              className="grid grid-cols-1 md:grid-cols-3 gap-2"
+                            >
                               <input
-                                type="date"
-                                value={
-                                  itemMeta[c.atividadeId]?.inicioOverride ?? ""
+                                value={c.titulo}
+                                onChange={(ev) =>
+                                  setEntregaveis((prev) =>
+                                    prev.map((x) => {
+                                      if (x.id !== e.id) return x;
+                                      return {
+                                        ...x,
+                                        checkpoints: x.checkpoints.map((k) =>
+                                          k.id === c.id
+                                            ? { ...k, titulo: ev.target.value }
+                                            : k
+                                        ),
+                                      };
+                                    })
+                                  )
                                 }
-                                onChange={(e) =>
-                                  setItemMeta((prev) => ({
-                                    ...prev,
-                                    [c.atividadeId]: {
-                                      ...prev[c.atividadeId],
-                                      inicioOverride:
-                                        e.target.value || undefined,
-                                    },
-                                  }))
-                                }
-                                className="w-36 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm"
+                                className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm"
+                                placeholder="Título da entrega"
                               />
                               <input
                                 type="date"
-                                value={
-                                  itemMeta[c.atividadeId]?.fimOverride ?? ""
+                                value={c.dataAlvo ?? ""}
+                                onChange={(ev) =>
+                                  setEntregaveis((prev) =>
+                                    prev.map((x) => {
+                                      if (x.id !== e.id) return x;
+                                      return {
+                                        ...x,
+                                        checkpoints: x.checkpoints.map((k) =>
+                                          k.id === c.id
+                                            ? {
+                                                ...k,
+                                                dataAlvo:
+                                                  ev.target.value || undefined,
+                                              }
+                                            : k
+                                        ),
+                                      };
+                                    })
+                                  )
                                 }
-                                onChange={(e) =>
-                                  setItemMeta((prev) => ({
-                                    ...prev,
-                                    [c.atividadeId]: {
-                                      ...prev[c.atividadeId],
-                                      fimOverride: e.target.value || undefined,
-                                    },
-                                  }))
-                                }
-                                className="w-36 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm"
+                                className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm"
                               />
                               <button
                                 type="button"
                                 onClick={() =>
-                                  setItemMeta((prev) => ({
-                                    ...prev,
-                                    [c.atividadeId]: {
-                                      ...prev[c.atividadeId],
-                                      inicioOverride: undefined,
-                                      fimOverride: undefined,
-                                    },
-                                  }))
+                                  setEntregaveis((prev) =>
+                                    prev.map((x) => {
+                                      if (x.id !== e.id) return x;
+                                      return {
+                                        ...x,
+                                        checkpoints: x.checkpoints.filter(
+                                          (k) => k.id !== c.id
+                                        ),
+                                      };
+                                    })
+                                  )
                                 }
-                                className="text-xs text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white"
+                                className="text-sm text-red-600 hover:text-red-800 dark:text-red-400"
                               >
-                                limpar
+                                Remover
                               </button>
                             </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                    {cronogramaPreview.length === 0 && (
-                      <tr>
-                        <td
-                          className="px-3 py-3 text-sm text-gray-600 dark:text-gray-400"
-                          colSpan={4}
-                        >
-                          Selecione projeto e atividades para ver o cronograma.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-gray-200 dark:border-gray-700 p-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-900 dark:text-white">
-                    Etapas / Entregas Planejadas
-                  </p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                    Organize o orçamento em etapas. Sempre haverá pelo menos
-                    uma etapa padrão.
-                  </p>
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                <label className="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-                  <input
-                    type="checkbox"
-                    checked={form.mostrarSubtotaisPorEntregavel}
-                    onChange={(e) =>
-                      setForm((p) => ({
-                        ...p,
-                        mostrarSubtotaisPorEntregavel: e.target.checked,
-                      }))
-                    }
-                  />
-                  Mostrar subtotais por etapa no PDF
-                </label>
-
-                <label className="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-                  <input
-                    type="checkbox"
-                    checked={form.mostrarDatasCronograma}
-                    onChange={(e) =>
-                      setForm((p) => ({
-                        ...p,
-                        mostrarDatasCronograma: e.target.checked,
-                      }))
-                    }
-                  />
-                  Exibir colunas de data de início e término no PDF
-                </label>
-
-                <div className="flex items-center justify-between">
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
-                    Etapas: {entregaveis.length}
-                  </p>
-                  <button
-                    type="button"
-                    onClick={addEntregavel}
-                    className="px-3 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700"
-                  >
-                    Adicionar etapa
-                  </button>
-                </div>
-
-                {entregaveis.map((e) => (
-                  <div
-                    key={e.id}
-                    className="rounded-lg border border-gray-200 dark:border-gray-700 p-3"
-                  >
-                    <div className="flex items-center justify-between gap-2 mb-2">
-                      <input
-                        value={e.titulo}
-                        onChange={(ev) =>
-                          setEntregaveis((prev) =>
-                            prev.map((x) =>
-                              x.id === e.id
-                                ? { ...x, titulo: ev.target.value }
-                                : x
-                            )
-                          )
-                        }
-                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
-                        placeholder="Nome da etapa"
-                      />
-                      {entregaveis.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => removeEntregavel(e.id)}
-                          className="text-red-600 hover:text-red-800 dark:text-red-400 p-2"
-                          title="Remover etapa"
-                        >
-                          <svg
-                            className="w-5 h-5"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                            />
-                          </svg>
-                        </button>
-                      )}
-                    </div>
-
-                    <div className="mt-3 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <p className="text-xs text-gray-500 dark:text-gray-400">
-                          (Opcional) Entregas Planejadas: {e.checkpoints.length}
-                        </p>
-                        <button
-                          type="button"
-                          onClick={() => addCheckpoint(e.id)}
-                          className="text-xs font-medium text-indigo-600 hover:text-indigo-700 dark:text-indigo-400"
-                        >
-                          Adicionar entrega
-                        </button>
-                      </div>
-
-                      {e.checkpoints.map((c) => (
-                        <div
-                          key={c.id}
-                          className="grid grid-cols-1 md:grid-cols-3 gap-2"
-                        >
-                          <input
-                            value={c.titulo}
-                            onChange={(ev) =>
-                              setEntregaveis((prev) =>
-                                prev.map((x) => {
-                                  if (x.id !== e.id) return x;
-                                  return {
-                                    ...x,
-                                    checkpoints: x.checkpoints.map((k) =>
-                                      k.id === c.id
-                                        ? { ...k, titulo: ev.target.value }
-                                        : k
-                                    ),
-                                  };
-                                })
-                              )
-                            }
-                            className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm"
-                            placeholder="Título da entrega"
-                          />
-                          <input
-                            type="date"
-                            value={c.dataAlvo ?? ""}
-                            onChange={(ev) =>
-                              setEntregaveis((prev) =>
-                                prev.map((x) => {
-                                  if (x.id !== e.id) return x;
-                                  return {
-                                    ...x,
-                                    checkpoints: x.checkpoints.map((k) =>
-                                      k.id === c.id
-                                        ? {
-                                            ...k,
-                                            dataAlvo:
-                                              ev.target.value || undefined,
-                                          }
-                                        : k
-                                    ),
-                                  };
-                                })
-                              )
-                            }
-                            className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm"
-                          />
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setEntregaveis((prev) =>
-                                prev.map((x) => {
-                                  if (x.id !== e.id) return x;
-                                  return {
-                                    ...x,
-                                    checkpoints: x.checkpoints.filter(
-                                      (k) => k.id !== c.id
-                                    ),
-                                  };
-                                })
-                              )
-                            }
-                            className="text-sm text-red-600 hover:text-red-800 dark:text-red-400"
-                          >
-                            Remover
-                          </button>
+                          ))}
                         </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
+                      </div>
+                    ))}
 
-                {entregaveis.length > 0 && (
-                  <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-3">
-                    <p className="text-sm font-medium text-gray-900 dark:text-white mb-2">
-                      Atribuição de atividades
-                    </p>
-                    {form.atividadeIds.length === 0 ? (
-                      <p className="text-sm text-gray-600 dark:text-gray-400">
-                        Selecione atividades para atribuir.
-                      </p>
-                    ) : (
-                      <div className="space-y-2">
-                        {form.atividadeIds.map((atividadeId) => {
-                          const a = atividadesDoProjeto.find(
-                            (x) => x.id === atividadeId
-                          );
-                          return (
+                    {entregaveis.length > 0 && atividadesOrcamento.length > 0 && (
+                      <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-3">
+                        <p className="text-sm font-medium text-gray-900 dark:text-white mb-2">
+                          Atribuição de atividades
+                        </p>
+                        <div className="space-y-2">
+                          {atividadesOrcamento.map((atividade) => (
                             <div
-                              key={atividadeId}
+                              key={atividade.id}
                               className="flex items-center justify-between gap-3"
                             >
                               <span className="text-sm text-gray-900 dark:text-white truncate">
-                                {a?.titulo ?? atividadeId}
+                                {atividade.titulo}
                               </span>
                               <select
                                 value={
-                                  itemMeta[atividadeId]?.entregavelId ||
+                                  itemMeta[atividade.id]?.entregavelId ||
                                   entregaveis[0].id
                                 }
                                 onChange={(ev) =>
                                   setItemMeta((prev) => ({
                                     ...prev,
-                                    [atividadeId]: {
-                                      ...prev[atividadeId],
+                                    [atividade.id]: {
+                                      ...prev[atividade.id],
                                       entregavelId:
                                         ev.target.value || undefined,
                                     },
@@ -813,15 +997,13 @@ export default function NovoOrcamentoPage() {
                                   ))}
                               </select>
                             </div>
-                          );
-                        })}
+                          ))}
+                        </div>
                       </div>
                     )}
                   </div>
-                )}
+                </div>
               </div>
-            </div>
-          </div>
             </div>
 
             <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
