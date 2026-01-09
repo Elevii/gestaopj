@@ -19,11 +19,12 @@ export default function OrcamentosPage() {
   const { userCompanies } = useAuth();
   const { company } = useCompany();
 
-  // Verificar acesso - membros não podem acessar
+  // Verificar acesso - apenas admins e proprietários podem acessar
   useEffect(() => {
     if (!company) return;
     const membership = userCompanies.find((m) => m.companyId === company.id);
-    if (membership?.role === "member") {
+    const isAdminOrOwner = membership?.role === "admin" || membership?.role === "owner";
+    if (!isAdminOrOwner) {
       router.push("/dashboard");
     }
   }, [company, userCompanies, router]);
@@ -33,6 +34,12 @@ export default function OrcamentosPage() {
     for (const p of projetos) map.set(p.id, { titulo: p.titulo, empresa: p.empresa });
     return map;
   }, [projetos]);
+
+  const isAdminOrOwner = useMemo(() => {
+    if (!company) return false;
+    const membership = userCompanies.find((m) => m.companyId === company.id);
+    return membership?.role === "admin" || membership?.role === "owner";
+  }, [company, userCompanies]);
 
   return (
     <div>
@@ -45,12 +52,14 @@ export default function OrcamentosPage() {
             Crie orçamentos de projetos e exporte em PDF
           </p>
         </div>
-        <Link
-          href="/dashboard/orcamentos/novo"
-          className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700"
-        >
-          Novo Orçamento
-        </Link>
+        {isAdminOrOwner && (
+          <Link
+            href="/dashboard/orcamentos/novo"
+            className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700"
+          >
+            Novo Orçamento
+          </Link>
+        )}
       </div>
 
       {loading ? (
@@ -154,16 +163,18 @@ export default function OrcamentosPage() {
                             >
                               Abrir
                             </Link>
-                            <button
-                              onClick={() => {
-                                if (confirm("Tem certeza que deseja excluir este orçamento?")) {
-                                  deleteOrcamento(o.id);
-                                }
-                              }}
-                              className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
-                            >
-                              Excluir
-                            </button>
+                            {isAdminOrOwner && (
+                              <button
+                                onClick={() => {
+                                  if (confirm("Tem certeza que deseja excluir este orçamento?")) {
+                                    deleteOrcamento(o.id);
+                                  }
+                                }}
+                                className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
+                              >
+                                Excluir
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>

@@ -30,12 +30,13 @@ export default function EditarOrcamentoPage() {
   const { userCompanies } = useAuth();
   const { company } = useCompany();
 
-  // Verificar acesso - membros não podem acessar
+  // Verificar acesso - apenas admins e proprietários podem editar orçamentos
   useEffect(() => {
     if (!company) return;
     const membership = userCompanies.find((m) => m.companyId === company.id);
-    if (membership?.role === "member") {
-      router.push("/dashboard");
+    const isAdminOrOwner = membership?.role === "admin" || membership?.role === "owner";
+    if (!isAdminOrOwner) {
+      router.push("/dashboard/orcamentos");
     }
   }, [company, userCompanies, router]);
 

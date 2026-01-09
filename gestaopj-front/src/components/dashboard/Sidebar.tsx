@@ -87,6 +87,7 @@ const navigationSections: NavigationSection[] = [
       {
         name: "Orçamentos",
         href: "/dashboard/orcamentos",
+        adminOnly: true,
         icon: (
           <svg
             className="w-6 h-6"
