@@ -10,19 +10,10 @@ import { useAtuacoes } from "@/contexts/AtuacaoContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCompany } from "@/contexts/CompanyContext";
 import { formatRelativeTime } from "@/utils/dashboardMetrics";
-import {
-  format,
-  parseISO,
-  startOfMonth,
-  addMonths,
-  setDate,
-  endOfMonth,
-} from "date-fns";
-import { memberInvoiceService } from "@/services/memberInvoiceService";
+import { format, parseISO } from "date-fns";
 import { companyMembershipService } from "@/services/companyMembershipService";
 import { atuacaoService } from "@/services/atuacaoService";
 import { projetoService } from "@/services/projetoService";
-import { MemberInvoice } from "@/types/memberInvoice";
 
 interface RecentActivity {
   id: string;
@@ -50,8 +41,8 @@ export default function DashboardPage() {
 
   // Estados para métricas administrativas
   const [adminMetrics, setAdminMetrics] = useState({
-    estimativaPagamentos: 0,
     totalAtuacoes: 0,
+    totalHorasUtilizadas: 0,
     membrosAtivos: 0,
     loading: true,
   });
@@ -133,21 +124,6 @@ export default function DashboardPage() {
         />
       </svg>
     ),
-    estimativaPagamentos: (
-      <svg
-        className="w-8 h-8"
-        fill="none"
-        stroke="currentColor"
-        viewBox="0 0 24 24"
-      >
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth={2}
-          d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"
-        />
-      </svg>
-    ),
     totalAtuacoes: (
       <svg
         className="w-8 h-8"
@@ -180,54 +156,12 @@ export default function DashboardPage() {
     ),
   };
 
-  // Calcular período de faturamento baseado na configuração da empresa
-  const billingPeriod = useMemo(() => {
-    if (!company) return null;
-
-    const now = new Date();
-    const diaInicio = company.diaInicioFaturamento || 1;
-    const diaFim = company.diaFimFaturamento || 31;
-
-    let inicio: Date;
-    let fim: Date;
-
-    // Se o dia de início é maior que o dia de fim, o período vai do dia início até o dia fim do mês seguinte
-    if (diaInicio > diaFim) {
-      // Início: dia de início no mês atual
-      const inicioMonth = now;
-      inicio = setDate(
-        inicioMonth,
-        Math.min(diaInicio, endOfMonth(inicioMonth).getDate())
-      );
-
-      // Fim: dia de fim no mês seguinte
-      const fimMonth = addMonths(now, 1);
-      fim = setDate(fimMonth, Math.min(diaFim, endOfMonth(fimMonth).getDate()));
-    } else {
-      // Período dentro do mesmo mês
-      const baseMonth = now;
-      inicio = setDate(
-        baseMonth,
-        Math.min(diaInicio, endOfMonth(baseMonth).getDate())
-      );
-      fim = setDate(
-        baseMonth,
-        Math.min(diaFim, endOfMonth(baseMonth).getDate())
-      );
-    }
-
-    return {
-      inicio: format(inicio, "yyyy-MM-dd"),
-      fim: format(fim, "yyyy-MM-dd"),
-    };
-  }, [company]);
-
   // Calcular métricas administrativas
   useEffect(() => {
     if (!isOwnerOrAdmin || !company) {
       setAdminMetrics({
-        estimativaPagamentos: 0,
         totalAtuacoes: 0,
+        totalHorasUtilizadas: 0,
         membrosAtivos: 0,
         loading: false,
       });
@@ -238,78 +172,47 @@ export default function DashboardPage() {
       try {
         setAdminMetrics((prev) => ({ ...prev, loading: true }));
 
-        // Usar período de faturamento configurado ou padrão (primeiro e último dia do mês)
-        const firstDayOfPeriod =
-          billingPeriod?.inicio ||
-          new Date(new Date().getFullYear(), new Date().getMonth(), 1)
-            .toISOString()
-            .split("T")[0];
-        const lastDayOfPeriod =
-          billingPeriod?.fim ||
-          new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0)
-            .toISOString()
-            .split("T")[0];
+        // Calcular total de registros de atuações do mês atual (primeiro e último dia do mês)
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = now.getMonth();
 
-        // Calcular estimativa de pagamentos (períodos não pagos)
-        // Agrupar faturas por período e calcular apenas para períodos não totalmente pagos
-        const memberInvoices = await memberInvoiceService.findByCompanyId(
-          company.id
-        );
+        // Calcular primeiro e último dia do mês sem problemas de timezone
+        // Formato: YYYY-MM-DD
+        const firstDayOfMonth = `${year}-${String(month + 1).padStart(2, "0")}-01`;
+        const lastDayOfMonth = `${year}-${String(month + 1).padStart(2, "0")}-${String(new Date(year, month + 1, 0).getDate()).padStart(2, "0")}`;
 
-        // Agrupar faturas por período
-        const invoicesByPeriodMap = new Map<string, typeof memberInvoices>();
-        memberInvoices.forEach((inv) => {
-          const periodoInicio = inv.periodoInicio.includes("T")
-            ? inv.periodoInicio.split("T")[0]
-            : inv.periodoInicio;
-          const periodoFim = inv.periodoFim.includes("T")
-            ? inv.periodoFim.split("T")[0]
-            : inv.periodoFim;
-          const key = `${periodoInicio}_${periodoFim}`;
-
-          if (!invoicesByPeriodMap.has(key)) {
-            invoicesByPeriodMap.set(key, []);
-          }
-          invoicesByPeriodMap.get(key)!.push(inv);
-        });
-
-        // Calcular estimativa apenas para períodos não totalmente pagos
-        let estimativaPagamentos = 0;
-        invoicesByPeriodMap.forEach((invoices, key) => {
-          // Verificar se o período está totalmente pago
-          // Se todas as faturas estiverem pagas ou canceladas, o período está pago
-          const todasPagasOuCanceladas =
-            invoices.length > 0 &&
-            invoices.every(
-              (inv) => inv.status === "pago" || inv.status === "cancelado"
-            );
-
-          // Se o período não estiver totalmente pago, somar as faturas pendentes
-          if (!todasPagasOuCanceladas) {
-            const valorPendente = invoices
-              .filter(
-                (inv) => inv.status !== "pago" && inv.status !== "cancelado"
-              )
-              .reduce((sum, inv) => sum + inv.valor, 0);
-            estimativaPagamentos += valorPendente;
-          }
-        });
-
-        // Calcular total de registros de atuações do período
-        const allAtuacoes = await atuacaoService.findAll();
+        // Buscar atuações da empresa (já filtra por companyId)
+        const allAtuacoes = await atuacaoService.findAll(company.id);
         const projetos = await projetoService.findAll(company.id);
         const projetosIds = new Set(projetos.map((p) => p.id));
+
+        // Filtrar atuações do mês atual que pertencem a projetos da empresa
+        // Inclui atividades avulsas, pois elas têm projetoId válido
         const atuacoesPeriodo = allAtuacoes.filter((a) => {
+          // Extrair apenas a data (YYYY-MM-DD) da atuação
           const dataAtuacao = a.data.includes("T")
             ? a.data.split("T")[0]
             : a.data;
-          return (
-            dataAtuacao >= firstDayOfPeriod &&
-            dataAtuacao <= lastDayOfPeriod &&
-            projetosIds.has(a.projetoId)
-          );
+
+          // Verificar se o projeto pertence à empresa (primeiro verificar isso)
+          if (!projetosIds.has(a.projetoId)) {
+            return false;
+          }
+
+          // Verificar se a data está no mês atual (comparação de strings YYYY-MM-DD funciona)
+          const dataValida =
+            dataAtuacao >= firstDayOfMonth && dataAtuacao <= lastDayOfMonth;
+
+          return dataValida;
         });
         const totalAtuacoes = atuacoesPeriodo.length;
+
+        // Calcular total de horas utilizadas das atuações do período
+        const totalHorasUtilizadas = atuacoesPeriodo.reduce(
+          (sum, a) => sum + (a.horasUtilizadas || 0),
+          0
+        );
 
         // Calcular membros ativos
         const memberships = await companyMembershipService.findByCompanyId(
@@ -318,16 +221,16 @@ export default function DashboardPage() {
         const membrosAtivos = memberships.filter((m) => m.active).length;
 
         setAdminMetrics({
-          estimativaPagamentos,
           totalAtuacoes,
+          totalHorasUtilizadas,
           membrosAtivos,
           loading: false,
         });
       } catch (error) {
         console.error("Erro ao carregar métricas administrativas:", error);
         setAdminMetrics({
-          estimativaPagamentos: 0,
           totalAtuacoes: 0,
+          totalHorasUtilizadas: 0,
           membrosAtivos: 0,
           loading: false,
         });
@@ -335,7 +238,7 @@ export default function DashboardPage() {
     };
 
     loadAdminMetrics();
-  }, [isOwnerOrAdmin, company, billingPeriod]);
+  }, [isOwnerOrAdmin, company]);
 
   // Calcular atividades recentes
   const recentActivities = useMemo<RecentActivity[]>(() => {
@@ -537,29 +440,6 @@ export default function DashboardPage() {
                 iconBgColor="bg-green-500"
               />
               <StatCard
-                title="Estimativa de Pagamentos (Períodos Não Pagos)"
-                value={
-                  adminMetrics.loading
-                    ? "Carregando..."
-                    : new Intl.NumberFormat("pt-BR", {
-                        style: "currency",
-                        currency: "BRL",
-                      }).format(adminMetrics.estimativaPagamentos)
-                }
-                icon={icons.estimativaPagamentos}
-                iconBgColor="bg-yellow-500"
-              />
-              <StatCard
-                title="Registros de Atuações (Mês)"
-                value={
-                  adminMetrics.loading
-                    ? "Carregando..."
-                    : adminMetrics.totalAtuacoes.toString()
-                }
-                icon={icons.totalAtuacoes}
-                iconBgColor="bg-blue-500"
-              />
-              <StatCard
                 title="Membros Ativos"
                 value={
                   adminMetrics.loading
@@ -568,6 +448,16 @@ export default function DashboardPage() {
                 }
                 icon={icons.membrosAtivos}
                 iconBgColor="bg-purple-500"
+              />
+              <StatCard
+                title="Registros de Atuações (Mês)"
+                value={
+                  adminMetrics.loading
+                    ? "Carregando..."
+                    : `${adminMetrics.totalAtuacoes} | ${adminMetrics.totalHorasUtilizadas % 1 === 0 ? adminMetrics.totalHorasUtilizadas.toFixed(0) : adminMetrics.totalHorasUtilizadas.toFixed(1)}h`
+                }
+                icon={icons.totalAtuacoes}
+                iconBgColor="bg-blue-500"
               />
             </>
           ) : (
