@@ -186,6 +186,9 @@ class OrcamentoService {
 
     // Criar atividades no projeto
     const dataInicio = formatTodayISODateLocal();
+    // Usar valorHora do orçamento se disponível, senão usar do projeto
+    const valorHoraParaAtividade = orcamento.valorHora ?? projeto.valorHora ?? 0;
+    
     for (const item of orcamento.itens) {
       await atividadeService.create(
         {
@@ -196,7 +199,7 @@ class OrcamentoService {
           status: "pendente",
           horasUtilizadas: 0,
         },
-        projeto.valorHora ?? 0,
+        valorHoraParaAtividade,
         projeto.horasUteisPorDia
       );
     }

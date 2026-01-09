@@ -17,6 +17,7 @@ interface AtividadeContextType {
   atividades: Atividade[];
   loading: boolean;
   loadAtividadesByProjeto: (projetoId: string) => Promise<void>;
+  refreshAtividades: () => Promise<void>;
   createAtividade: (data: CreateAtividadeDTO, projetoId: string) => Promise<Atividade>;
   updateAtividade: (
     id: string,
@@ -58,6 +59,15 @@ export function AtividadeProvider({ children }: { children: ReactNode }) {
   const loadAtividadesByProjeto = useCallback(async (projetoId: string) => {
     // Não precisa fazer nada, já carregou todas as atividades
     // Esta função existe apenas para manter a interface compatível
+  }, []);
+
+  const refreshAtividades = useCallback(async () => {
+    try {
+      const allAtividades = await atividadeService.findAll();
+      setAtividades(allAtividades);
+    } catch (error) {
+      console.error("Erro ao recarregar atividades:", error);
+    }
   }, []);
 
   const createAtividade = async (
@@ -150,6 +160,7 @@ export function AtividadeProvider({ children }: { children: ReactNode }) {
         atividades,
         loading,
         loadAtividadesByProjeto,
+        refreshAtividades,
         createAtividade,
         updateAtividade,
         deleteAtividade,

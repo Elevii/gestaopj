@@ -240,7 +240,7 @@ export async function exportOrcamentoToPdf(params: {
   }
   
   doc.text(
-    `${valorProjetoTexto}${valorHoraTexto ? ` | ${valorHoraTexto}` : ""} | Horas úteis/dia: ${params.projeto.horasUteisPorDia}`,
+    `${valorProjetoTexto}${valorHoraTexto ? ` | ${valorHoraTexto}` : ""}`,
     leftX,
     cursorY
   );
@@ -252,22 +252,6 @@ export async function exportOrcamentoToPdf(params: {
   rightCursorY += 14;
   doc.setFontSize(10);
   doc.text(`Horas estimadas: ${totalHoras}h`, rightX, rightCursorY);
-  rightCursorY += 12;
-  
-  // Determinar label e valor do resumo baseado no orçamento
-  const labelResumo = params.orcamento.custoTotal !== undefined
-    ? "Valor Total"
-    : params.orcamento.valorHora !== undefined
-      ? "Custo Calculado"
-      : params.projeto.tipoCobranca === "fixo"
-        ? "Valor Total"
-        : "Custo Calculado";
-  
-  doc.text(
-    `${labelResumo}: ${formatCurrency(totalCustoCalculado)}`,
-    rightX,
-    rightCursorY
-  );
   rightCursorY += 12;
 
   // Sincroniza cursorY com o maior dos dois
@@ -385,11 +369,10 @@ export async function exportOrcamentoToPdf(params: {
         );
 
         // Adiciona colunas de cronograma apenas se o usuário optou por exibir
+        const mostrarDatas = params.orcamento.mostrarDatasCronograma === true;
         const head = [
           ...cols.map(fieldLabel),
-          ...(params.orcamento.mostrarDatasCronograma !== false
-            ? ["Início", "Fim"]
-            : []),
+          ...(mostrarDatas ? ["Início", "Fim"] : []),
         ];
 
         const body = atividadesDoEntregavel.map(({ ativ, crono }) => {
@@ -399,7 +382,7 @@ export async function exportOrcamentoToPdf(params: {
           );
           return [
             ...rowData,
-            ...(params.orcamento.mostrarDatasCronograma !== false
+            ...(mostrarDatas
               ? [
                   crono ? formatDateBr(crono.inicio) : "-",
                   crono ? formatDateBr(crono.fim) : "-",

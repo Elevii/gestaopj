@@ -6,6 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { useOrcamentos } from "@/contexts/OrcamentoContext";
 import { useProjetos } from "@/contexts/ProjetoContext";
+import { useAtividades } from "@/contexts/AtividadeContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCompany } from "@/contexts/CompanyContext";
 import { exportOrcamentoToPdf } from "@/utils/exportOrcamento";
@@ -29,6 +30,7 @@ export default function OrcamentoDetalhePage() {
   }, [company, userCompanies, router]);
   const { getOrcamentoById, approveOrcamento, refreshOrcamentos } = useOrcamentos();
   const { getProjetoById } = useProjetos();
+  const { refreshAtividades } = useAtividades();
 
   const [exporting, setExporting] = useState(false);
   const [approving, setApproving] = useState(false);
@@ -43,6 +45,8 @@ export default function OrcamentoDetalhePage() {
     try {
       await approveOrcamento(orcamento.id);
       await refreshOrcamentos();
+      // Recarregar atividades para mostrar as recém-criadas
+      await refreshAtividades();
       setShowConfirmApprove(false);
     } catch (error) {
       console.error("Erro ao aprovar orçamento:", error);

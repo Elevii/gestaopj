@@ -76,7 +76,7 @@ export default function EditarOrcamentoPage() {
     ]) as OrcamentoCampoAtividade[],
     usarEntregaveis: orcamento?.usarEntregaveis ?? true,
     mostrarSubtotaisPorEntregavel: orcamento?.mostrarSubtotaisPorEntregavel ?? true,
-    mostrarDatasCronograma: orcamento?.mostrarDatasCronograma ?? true,
+    mostrarDatasCronograma: orcamento?.mostrarDatasCronograma ?? false,
     introText: orcamento?.observacoes || "",
     tipoCalculo: (orcamento?.valorHora ? "valorHora" : "custoTotal") as "valorHora" | "custoTotal",
     valorHora: orcamento?.valorHora,

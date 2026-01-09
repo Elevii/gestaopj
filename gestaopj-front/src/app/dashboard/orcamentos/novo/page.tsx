@@ -65,7 +65,7 @@ export default function NovoOrcamentoPage() {
     ] as OrcamentoCampoAtividade[],
     usarEntregaveis: true,
     mostrarSubtotaisPorEntregavel: true,
-    mostrarDatasCronograma: true,
+    mostrarDatasCronograma: false,
     introText: "",
     tipoCalculo: "valorHora" as "valorHora" | "custoTotal",
     valorHora: undefined as number | undefined,
