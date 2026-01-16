@@ -12,6 +12,7 @@ import { formatTodayISODateLocal } from "@/utils/estimativas";
 
 type Errors = Partial<Record<string, string>> & {
   tituloAvulsa?: string;
+  horasEstimadasAtividade?: string;
 };
 
 const tipoOptions: { value: TipoAtuacao; label: string }[] = [
@@ -35,7 +36,7 @@ const statusLabel: Record<StatusAtividade, string> = {
 export default function NovaAtuacaoPage() {
   const router = useRouter();
   const { projetos } = useProjetos();
-  const { getAtividadesByProjeto } = useAtividades();
+  const { getAtividadesByProjeto, createAtividade, refreshAtividades } = useAtividades();
   const { createAtuacao } = useAtuacoes();
   const { company: activeCompany } = useCompany();
 
@@ -56,6 +57,8 @@ export default function NovaAtuacaoPage() {
     evidenciaUrl: "",
   });
   const [statusManual, setStatusManual] = useState(false);
+  const [criarAtividade, setCriarAtividade] = useState(false);
+  const [horasEstimadasAtividade, setHorasEstimadasAtividade] = useState("");
 
   useEffect(() => {
     // Pré-seleciona o primeiro projeto (se existir) para reduzir cliques.
@@ -130,6 +133,14 @@ export default function NovaAtuacaoPage() {
     }
   }, [atividadesDoProjeto, formData.atividadeId]);
 
+  useEffect(() => {
+    // Reseta checkbox e horas estimadas quando não for atividade avulsa
+    if (!isAtividadeAvulsa) {
+      setCriarAtividade(false);
+      setHorasEstimadasAtividade("");
+    }
+  }, [isAtividadeAvulsa]);
+
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
   ) => {
@@ -167,6 +178,16 @@ export default function NovaAtuacaoPage() {
       } else if (formData.tituloAvulsa.trim().length > 30) {
         nextErrors.tituloAvulsa = "Título deve ter no máximo 30 caracteres";
       }
+
+      // Validação adicional quando checkbox estiver marcado
+      if (criarAtividade) {
+        const horasEstimadas = parseFloat(horasEstimadasAtividade);
+        if (!horasEstimadasAtividade) {
+          nextErrors.horasEstimadasAtividade = "Horas estimadas é obrigatório";
+        } else if (isNaN(horasEstimadas) || horasEstimadas <= 0) {
+          nextErrors.horasEstimadasAtividade = "Horas estimadas deve ser maior que zero";
+        }
+      }
     }
 
     if (Object.keys(nextErrors).length > 0) {
@@ -176,16 +197,38 @@ export default function NovaAtuacaoPage() {
 
     setIsLoading(true);
     try {
+      let atividadeIdFinal = formData.atividadeId;
+      let horasEstimadasFinal = isAtividadeAvulsa ? 0 : horasEstimadas;
+
+      // Se checkbox marcado, criar atividade no projeto
+      if (isAtividadeAvulsa && criarAtividade) {
+        const novaAtividade = await createAtividade(
+          {
+            projetoId: formData.projetoId,
+            titulo: formData.tituloAvulsa.trim(),
+            dataInicio: formData.data,
+            horasAtuacao: parseFloat(horasEstimadasAtividade),
+            status: formData.statusAtividadeNoRegistro,
+          },
+          formData.projetoId
+        );
+        atividadeIdFinal = novaAtividade.id;
+        horasEstimadasFinal = novaAtividade.horasAtuacao;
+        
+        // Força atualização do contexto para garantir sincronização
+        await refreshAtividades();
+      }
+
       await createAtuacao({
         projetoId: formData.projetoId,
-        atividadeId: formData.atividadeId,
+        atividadeId: atividadeIdFinal,
         data: formData.data,
         horarioInicio: formData.horarioInicio || undefined,
-        horasEstimadasNoRegistro: isAtividadeAvulsa ? 0 : horasEstimadas,
+        horasEstimadasNoRegistro: horasEstimadasFinal,
         horasUtilizadas: horas,
         tipo: formData.tipo,
         statusAtividadeNoRegistro: formData.statusAtividadeNoRegistro,
-        tituloAvulsa: isAtividadeAvulsa ? formData.tituloAvulsa.trim() : undefined,
+        tituloAvulsa: (isAtividadeAvulsa && !criarAtividade) ? formData.tituloAvulsa.trim() : undefined,
         descricao: formData.descricao.trim() || undefined,
         impactoGerado: formData.impactoGerado.trim() || undefined,
         evidenciaUrl: formData.evidenciaUrl.trim() || undefined,
@@ -327,40 +370,103 @@ export default function NovaAtuacaoPage() {
 
           {/* Campo de título para atividade avulsa */}
           {formData.projetoId && formData.atividadeId && isAtividadeAvulsa && (
-            <div>
-              <label
-                htmlFor="tituloAvulsa"
-                className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
-              >
-                Título da atividade avulsa <span className="text-red-500">*</span>
-              </label>
-              <input
-                id="tituloAvulsa"
-                name="tituloAvulsa"
-                type="text"
-                maxLength={30}
-                required
-                value={formData.tituloAvulsa}
-                onChange={handleChange}
-                className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors dark:bg-gray-700 dark:border-gray-600 dark:text-white ${
-                  errors.tituloAvulsa ? "border-red-500" : "border-gray-300"
-                }`}
-                placeholder="Ex: Reunião com cliente, Planejamento sprint..."
-              />
-              <div className="mt-1 flex items-center justify-between">
-                {errors.tituloAvulsa ? (
-                  <p className="text-sm text-red-600 dark:text-red-400">
-                    {errors.tituloAvulsa}
-                  </p>
-                ) : (
+            <div className="space-y-4">
+              <div>
+                <label
+                  htmlFor="tituloAvulsa"
+                  className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+                >
+                  Título da atividade avulsa <span className="text-red-500">*</span>
+                </label>
+                <input
+                  id="tituloAvulsa"
+                  name="tituloAvulsa"
+                  type="text"
+                  maxLength={30}
+                  required
+                  value={formData.tituloAvulsa}
+                  onChange={handleChange}
+                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors dark:bg-gray-700 dark:border-gray-600 dark:text-white ${
+                    errors.tituloAvulsa ? "border-red-500" : "border-gray-300"
+                  }`}
+                  placeholder="Ex: Reunião com cliente, Planejamento sprint..."
+                />
+                <div className="mt-1 flex items-center justify-between">
+                  {errors.tituloAvulsa ? (
+                    <p className="text-sm text-red-600 dark:text-red-400">
+                      {errors.tituloAvulsa}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      Descreva brevemente a atividade avulsa
+                    </p>
+                  )}
                   <p className="text-xs text-gray-500 dark:text-gray-400">
-                    Descreva brevemente a atividade avulsa
+                    {formData.tituloAvulsa.length}/30
                   </p>
-                )}
-                <p className="text-xs text-gray-500 dark:text-gray-400">
-                  {formData.tituloAvulsa.length}/30
-                </p>
+                </div>
               </div>
+
+              {/* Checkbox para criar atividade no projeto */}
+              <div className="flex items-start space-x-3 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-900/40 rounded-lg">
+                <input
+                  id="criarAtividade"
+                  type="checkbox"
+                  checked={criarAtividade}
+                  onChange={(e) => setCriarAtividade(e.target.checked)}
+                  className="mt-1 w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700"
+                />
+                <div className="flex-1">
+                  <label
+                    htmlFor="criarAtividade"
+                    className="block text-sm font-medium text-gray-900 dark:text-white cursor-pointer"
+                  >
+                    Criar atividade no projeto
+                  </label>
+                  <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                    Ao marcar, a atividade será criada no projeto e a atuação será registrada nela, ao invés de ser uma atuação avulsa.
+                  </p>
+                </div>
+              </div>
+
+              {/* Campo de horas estimadas (aparece quando checkbox marcado) */}
+              {criarAtividade && (
+                <div>
+                  <label
+                    htmlFor="horasEstimadasAtividade"
+                    className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+                  >
+                    Horas estimadas (HE) <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    id="horasEstimadasAtividade"
+                    name="horasEstimadasAtividade"
+                    type="number"
+                    min="0.25"
+                    step="0.25"
+                    value={horasEstimadasAtividade}
+                    onChange={(e) => {
+                      setHorasEstimadasAtividade(e.target.value);
+                      if (errors.horasEstimadasAtividade) {
+                        setErrors((prev) => ({ ...prev, horasEstimadasAtividade: undefined }));
+                      }
+                    }}
+                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors dark:bg-gray-700 dark:border-gray-600 dark:text-white ${
+                      errors.horasEstimadasAtividade ? "border-red-500" : "border-gray-300"
+                    }`}
+                    placeholder="Ex: 8"
+                  />
+                  {errors.horasEstimadasAtividade ? (
+                    <p className="mt-1 text-sm text-red-600 dark:text-red-400">
+                      {errors.horasEstimadasAtividade}
+                    </p>
+                  ) : (
+                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      Informe quantas horas são estimadas para esta atividade
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
