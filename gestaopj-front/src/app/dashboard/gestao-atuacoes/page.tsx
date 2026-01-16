@@ -530,7 +530,7 @@ export default function GestaoAtuacoesPage() {
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="text-sm text-gray-900 dark:text-white">
-                              {isAtividadeAvulsa ? "0h" : `${hd.toFixed(2)}h`}
+                              {isAtividadeAvulsa ? "0h" : `${parseFloat(hd.toFixed(2))}h`}
                             </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
@@ -801,7 +801,7 @@ export default function GestaoAtuacoesPage() {
                 {!isAtividadeAvulsa && (
                   <div>
                     <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Horas Disponíveis (HD)</p>
-                    <p className="text-base text-gray-900 dark:text-white">{hd.toFixed(2)}h</p>
+                    <p className="text-base text-gray-900 dark:text-white">{parseFloat(hd.toFixed(2))}h</p>
                   </div>
                 )}
 

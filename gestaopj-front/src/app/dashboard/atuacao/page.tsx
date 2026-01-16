@@ -447,7 +447,7 @@ export default function AtuacaoPage() {
                                   return "0h";
                                 }
                                 const hd = hdByAtuacaoId.get(a.id) ?? 0;
-                                return `${hd.toFixed(2)}h`;
+                                return `${parseFloat(hd.toFixed(2))}h`;
                               })()}
                             </div>
                           </td>
@@ -738,7 +738,7 @@ export default function AtuacaoPage() {
                 <div>
                   <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Horas Disponíveis (HD)</p>
                   <p className="text-base text-gray-900 dark:text-white">
-                    {isAtividadeAvulsa ? "0h" : `${hd.toFixed(2)}h`}
+                    {isAtividadeAvulsa ? "0h" : `${parseFloat(hd.toFixed(2))}h`}
                   </p>
                 </div>
 
