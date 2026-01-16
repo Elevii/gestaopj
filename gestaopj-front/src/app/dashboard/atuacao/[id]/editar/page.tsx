@@ -81,7 +81,9 @@ export default function EditarAtuacaoPage() {
     
     const todas = getAtividadesByProjeto(formData.projetoId);
     const atividadeAvulsa = todas.find((a) => a.id.startsWith("__ATIVIDADE_AVULSA__"));
-    const outras = todas.filter((a) => a.status !== "concluida" && !a.id.startsWith("__ATIVIDADE_AVULSA__"));
+    // Na edição, mostra TODAS as atividades do projeto (independente do status)
+    // Apenas separa atividade avulsa das outras
+    const outras = todas.filter((a) => !a.id.startsWith("__ATIVIDADE_AVULSA__"));
     
     // Atividade avulsa sempre aparece no início
     return atividadeAvulsa ? [atividadeAvulsa, ...outras] : outras;
