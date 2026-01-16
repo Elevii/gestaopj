@@ -20,7 +20,10 @@ interface AtuacaoContextType {
   loading: boolean;
   refreshAtuacoes: () => Promise<void>;
   createAtuacao: (data: CreateAtuacaoDTO) => Promise<Atuacao>;
-  updateAtuacao: (id: string, data: Partial<CreateAtuacaoDTO>) => Promise<Atuacao>;
+  updateAtuacao: (
+    id: string,
+    data: Partial<CreateAtuacaoDTO>
+  ) => Promise<Atuacao>;
   deleteAtuacao: (id: string) => Promise<void>;
   getAtuacoesByProjeto: (projetoId: string) => Atuacao[];
   getAtuacaoById: (id: string) => Atuacao | undefined;
@@ -71,6 +74,45 @@ export function AtuacaoProvider({ children }: { children: ReactNode }) {
     return totals;
   }, [atuacoes]);
 
+  // Sincroniza todas as atividades quando atuações ou atividades mudam
+  useEffect(() => {
+    const syncAllAtividades = async () => {
+      if (atuacoes.length === 0 || atividades.length === 0) return;
+
+      // Agrupa atuações por atividade
+      const atividadesComAtuacoes = new Set(atuacoes.map((a) => a.atividadeId));
+
+      // Sincroniza cada atividade que tem atuações
+      for (const atividadeId of atividadesComAtuacoes) {
+        const atividade = atividades.find((a) => a.id === atividadeId);
+        if (!atividade) continue;
+
+        const totalHoras = atuacoes
+          .filter((a) => a.atividadeId === atividadeId)
+          .reduce((sum, a) => sum + (a.horasUtilizadas ?? 0), 0);
+
+        // Verifica se precisa atualizar
+        if (atividade.horasUtilizadas !== totalHoras) {
+          const lastAtuacao = [...atuacoes]
+            .filter((a) => a.atividadeId === atividadeId)
+            .sort((a, b) =>
+              a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0
+            )[0];
+
+          const status =
+            (lastAtuacao as any)?.statusAtividadeNoRegistro ?? atividade.status;
+
+          await updateAtividade(atividadeId, {
+            horasUtilizadas: totalHoras,
+            status,
+          });
+        }
+      }
+    };
+
+    syncAllAtividades();
+  }, [atuacoes, atividades, updateAtividade]);
+
   const syncAtividadeHorasEStatus = useCallback(
     async (params: { atividadeId: string; atuacoesSnapshot: Atuacao[] }) => {
       const atividade = atividades.find((a) => a.id === params.atividadeId);
@@ -84,7 +126,9 @@ export function AtuacaoProvider({ children }: { children: ReactNode }) {
       // Status atual da atividade passa a ser o status do último registro de atuação (se existir).
       const lastAtuacao = [...params.atuacoesSnapshot]
         .filter((a) => a.atividadeId === params.atividadeId)
-        .sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0))[0];
+        .sort((a, b) =>
+          a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0
+        )[0];
 
       const status =
         (lastAtuacao as any)?.statusAtividadeNoRegistro ??
@@ -93,7 +137,10 @@ export function AtuacaoProvider({ children }: { children: ReactNode }) {
           horasEstimadas: atividade.horasAtuacao,
         });
 
-      await updateAtividade(params.atividadeId, { horasUtilizadas: totalHoras, status });
+      await updateAtividade(params.atividadeId, {
+        horasUtilizadas: totalHoras,
+        status,
+      });
     },
     [atividades, updateAtividade]
   );
@@ -131,15 +178,21 @@ export function AtuacaoProvider({ children }: { children: ReactNode }) {
       setAtuacoes(all);
 
       // Sincroniza horas/status da atividade se a atividade mudou ou horas mudaram
-      if (data.atividadeId !== undefined || data.horasUtilizadas !== undefined) {
+      if (
+        data.atividadeId !== undefined ||
+        data.horasUtilizadas !== undefined
+      ) {
         const atividadeId = data.atividadeId ?? atuacaoAntiga.atividadeId;
         await syncAtividadeHorasEStatus({
           atividadeId,
           atuacoesSnapshot: all,
         });
-        
+
         // Se mudou de atividade, também sincroniza a atividade antiga
-        if (data.atividadeId && data.atividadeId !== atuacaoAntiga.atividadeId) {
+        if (
+          data.atividadeId &&
+          data.atividadeId !== atuacaoAntiga.atividadeId
+        ) {
           await syncAtividadeHorasEStatus({
             atividadeId: atuacaoAntiga.atividadeId,
             atuacoesSnapshot: all,
@@ -204,5 +257,3 @@ export function useAtuacoes() {
   }
   return ctx;
 }
-
-

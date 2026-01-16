@@ -36,7 +36,8 @@ const statusLabel: Record<StatusAtividade, string> = {
 export default function NovaAtuacaoPage() {
   const router = useRouter();
   const { projetos } = useProjetos();
-  const { getAtividadesByProjeto, createAtividade, refreshAtividades } = useAtividades();
+  const { getAtividadesByProjeto, createAtividade, refreshAtividades } =
+    useAtividades();
   const { createAtuacao } = useAtuacoes();
   const { company: activeCompany } = useCompany();
 
@@ -69,12 +70,17 @@ export default function NovaAtuacaoPage() {
 
   const atividadesDoProjeto = useMemo(() => {
     if (!formData.projetoId) return [];
-    
+
     const todas = getAtividadesByProjeto(formData.projetoId);
     // Filtra atividades concluídas, mas sempre mantém a atividade avulsa
-    const atividadeAvulsa = todas.find((a) => a.id.startsWith("__ATIVIDADE_AVULSA__"));
-    const outras = todas.filter((a) => a.status !== "concluida" && !a.id.startsWith("__ATIVIDADE_AVULSA__"));
-    
+    const atividadeAvulsa = todas.find((a) =>
+      a.id.startsWith("__ATIVIDADE_AVULSA__")
+    );
+    const outras = todas.filter(
+      (a) =>
+        a.status !== "concluida" && !a.id.startsWith("__ATIVIDADE_AVULSA__")
+    );
+
     // Atividade avulsa sempre aparece no início
     return atividadeAvulsa ? [atividadeAvulsa, ...outras] : outras;
   }, [formData.projetoId, getAtividadesByProjeto]);
@@ -87,8 +93,12 @@ export default function NovaAtuacaoPage() {
     };
 
     // Separa atividade avulsa das outras
-    const atividadeAvulsa = atividadesDoProjeto.find((a) => a.id.startsWith("__ATIVIDADE_AVULSA__"));
-    const outras = atividadesDoProjeto.filter((a) => !a.id.startsWith("__ATIVIDADE_AVULSA__"));
+    const atividadeAvulsa = atividadesDoProjeto.find((a) =>
+      a.id.startsWith("__ATIVIDADE_AVULSA__")
+    );
+    const outras = atividadesDoProjeto.filter(
+      (a) => !a.id.startsWith("__ATIVIDADE_AVULSA__")
+    );
 
     // Ordena as outras atividades
     const outrasOrdenadas = outras.sort((a, b) => {
@@ -99,19 +109,35 @@ export default function NovaAtuacaoPage() {
     });
 
     // Atividade avulsa sempre no início
-    return atividadeAvulsa ? [atividadeAvulsa, ...outrasOrdenadas] : outrasOrdenadas;
+    return atividadeAvulsa
+      ? [atividadeAvulsa, ...outrasOrdenadas]
+      : outrasOrdenadas;
   }, [atividadesDoProjeto]);
 
   const atividadeSelecionada = useMemo(() => {
     return atividadesDoProjeto.find((a) => a.id === formData.atividadeId);
   }, [atividadesDoProjeto, formData.atividadeId]);
 
-  const isAtividadeAvulsa = atividadeSelecionada?.id.startsWith("__ATIVIDADE_AVULSA__") ?? false;
-  const horasEstimadas = isAtividadeAvulsa ? Infinity : (atividadeSelecionada?.horasAtuacao ?? 0);
+  const isAtividadeAvulsa =
+    atividadeSelecionada?.id.startsWith("__ATIVIDADE_AVULSA__") ?? false;
+
+  // Se checkbox marcado, usar horas informadas; senão, usar Infinity para avulsa ou horas da atividade
+  const horasEstimadas =
+    isAtividadeAvulsa && criarAtividade
+      ? parseFloat(horasEstimadasAtividade) || 0
+      : isAtividadeAvulsa
+        ? Infinity
+        : (atividadeSelecionada?.horasAtuacao ?? 0);
+
   const horasUtilizadasAtuais = atividadeSelecionada?.horasUtilizadas ?? 0;
   const horasNovaAtuacao = parseFloat(formData.horasUtilizadas || "0") || 0;
   const totalHorasAposSalvar = horasUtilizadasAtuais + horasNovaAtuacao;
-  const saldoAposSalvar = isAtividadeAvulsa ? Infinity : (horasEstimadas - totalHorasAposSalvar);
+
+  // Saldo após salvar: se for avulsa E checkbox desmarcado = Infinity, senão calcular
+  const saldoAposSalvar =
+    isAtividadeAvulsa && !criarAtividade
+      ? Infinity
+      : horasEstimadas - totalHorasAposSalvar;
 
   useEffect(() => {
     // Default do registro: "Em execução", a menos que a atividade já esteja "Concluída".
@@ -120,14 +146,18 @@ export default function NovaAtuacaoPage() {
     setFormData((prev) => ({
       ...prev,
       statusAtividadeNoRegistro:
-        atividadeSelecionada.status === "concluida" ? "concluida" : "em_execucao",
+        atividadeSelecionada.status === "concluida"
+          ? "concluida"
+          : "em_execucao",
     }));
   }, [atividadeSelecionada]);
 
   useEffect(() => {
     // Se a atividade selecionada não pertence ao projeto atual, reseta.
     if (!formData.atividadeId) return;
-    const exists = atividadesDoProjeto.some((a) => a.id === formData.atividadeId);
+    const exists = atividadesDoProjeto.some(
+      (a) => a.id === formData.atividadeId
+    );
     if (!exists) {
       setFormData((prev) => ({ ...prev, atividadeId: "" }));
     }
@@ -142,7 +172,9 @@ export default function NovaAtuacaoPage() {
   }, [isAtividadeAvulsa]);
 
   const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
+    e: React.ChangeEvent<
+      HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
+    >
   ) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
@@ -157,7 +189,8 @@ export default function NovaAtuacaoPage() {
 
     const nextErrors: Errors = {};
     if (!formData.projetoId) nextErrors.projetoId = "Projeto é obrigatório";
-    if (!formData.atividadeId) nextErrors.atividadeId = "Atividade é obrigatória";
+    if (!formData.atividadeId)
+      nextErrors.atividadeId = "Atividade é obrigatória";
     if (!formData.data) nextErrors.data = "Data da atuação é obrigatória";
 
     const horas = parseFloat(formData.horasUtilizadas);
@@ -185,7 +218,8 @@ export default function NovaAtuacaoPage() {
         if (!horasEstimadasAtividade) {
           nextErrors.horasEstimadasAtividade = "Horas estimadas é obrigatório";
         } else if (isNaN(horasEstimadas) || horasEstimadas <= 0) {
-          nextErrors.horasEstimadasAtividade = "Horas estimadas deve ser maior que zero";
+          nextErrors.horasEstimadasAtividade =
+            "Horas estimadas deve ser maior que zero";
         }
       }
     }
@@ -214,7 +248,7 @@ export default function NovaAtuacaoPage() {
         );
         atividadeIdFinal = novaAtividade.id;
         horasEstimadasFinal = novaAtividade.horasAtuacao;
-        
+
         // Força atualização do contexto para garantir sincronização
         await refreshAtividades();
       }
@@ -228,7 +262,10 @@ export default function NovaAtuacaoPage() {
         horasUtilizadas: horas,
         tipo: formData.tipo,
         statusAtividadeNoRegistro: formData.statusAtividadeNoRegistro,
-        tituloAvulsa: (isAtividadeAvulsa && !criarAtividade) ? formData.tituloAvulsa.trim() : undefined,
+        tituloAvulsa:
+          isAtividadeAvulsa && !criarAtividade
+            ? formData.tituloAvulsa.trim()
+            : undefined,
         descricao: formData.descricao.trim() || undefined,
         impactoGerado: formData.impactoGerado.trim() || undefined,
         evidenciaUrl: formData.evidenciaUrl.trim() || undefined,
@@ -250,8 +287,18 @@ export default function NovaAtuacaoPage() {
           href="/dashboard/atuacao"
           className="text-sm text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200 mb-2 inline-flex items-center"
         >
-          <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          <svg
+            className="w-4 h-4 mr-1"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M15 19l-7-7 7-7"
+            />
           </svg>
           Voltar para atuações
         </Link>
@@ -291,7 +338,8 @@ export default function NovaAtuacaoPage() {
             ) : (
               <div className="w-full px-4 py-3 border border-yellow-300 dark:border-yellow-600 rounded-lg bg-yellow-50 dark:bg-yellow-900/20">
                 <p className="text-sm text-yellow-800 dark:text-yellow-200">
-                  Nenhuma empresa selecionada. Selecione uma empresa no menu superior.
+                  Nenhuma empresa selecionada. Selecione uma empresa no menu
+                  superior.
                 </p>
               </div>
             )}
@@ -312,7 +360,11 @@ export default function NovaAtuacaoPage() {
                 onChange={(e) => {
                   // trocar projeto deve resetar atividade
                   handleChange(e);
-                  setFormData((prev) => ({ ...prev, projetoId: e.target.value, atividadeId: "" }));
+                  setFormData((prev) => ({
+                    ...prev,
+                    projetoId: e.target.value,
+                    atividadeId: "",
+                  }));
                 }}
                 className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors dark:bg-gray-700 dark:border-gray-600 dark:text-white ${
                   errors.projetoId ? "border-red-500" : "border-gray-300"
@@ -355,7 +407,9 @@ export default function NovaAtuacaoPage() {
                   return (
                     <option key={a.id} value={a.id}>
                       {isAvulsa ? "📌 " : ""}
-                      {isAvulsa ? a.titulo : `(${statusLabel[a.status]}) - ${a.titulo}`}
+                      {isAvulsa
+                        ? a.titulo
+                        : `(${statusLabel[a.status]}) - ${a.titulo}`}
                     </option>
                   );
                 })}
@@ -376,7 +430,8 @@ export default function NovaAtuacaoPage() {
                   htmlFor="tituloAvulsa"
                   className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
                 >
-                  Título da atividade avulsa <span className="text-red-500">*</span>
+                  Título da atividade avulsa{" "}
+                  <span className="text-red-500">*</span>
                 </label>
                 <input
                   id="tituloAvulsa"
@@ -424,7 +479,8 @@ export default function NovaAtuacaoPage() {
                     Criar atividade no projeto
                   </label>
                   <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                    Ao marcar, a atividade será criada no projeto e a atuação será registrada nela, ao invés de ser uma atuação avulsa.
+                    Ao marcar, a atividade será criada no projeto e a atuação
+                    será registrada nela, ao invés de ser uma atuação avulsa.
                   </p>
                 </div>
               </div>
@@ -448,11 +504,16 @@ export default function NovaAtuacaoPage() {
                     onChange={(e) => {
                       setHorasEstimadasAtividade(e.target.value);
                       if (errors.horasEstimadasAtividade) {
-                        setErrors((prev) => ({ ...prev, horasEstimadasAtividade: undefined }));
+                        setErrors((prev) => ({
+                          ...prev,
+                          horasEstimadasAtividade: undefined,
+                        }));
                       }
                     }}
                     className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors dark:bg-gray-700 dark:border-gray-600 dark:text-white ${
-                      errors.horasEstimadasAtividade ? "border-red-500" : "border-gray-300"
+                      errors.horasEstimadasAtividade
+                        ? "border-red-500"
+                        : "border-gray-300"
                     }`}
                     placeholder="Ex: 8"
                   />
@@ -479,7 +540,8 @@ export default function NovaAtuacaoPage() {
                       Detalhes da atuação
                     </h2>
                     <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                      Preencha primeiro os campos obrigatórios para registrar a atuação.
+                      Preencha primeiro os campos obrigatórios para registrar a
+                      atuação.
                     </p>
                   </div>
                   <span className="text-xs text-gray-500 dark:text-gray-400">
@@ -520,7 +582,8 @@ export default function NovaAtuacaoPage() {
                           htmlFor="horasUtilizadas"
                           className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
                         >
-                          Horas utilizadas (HU) <span className="text-red-500">*</span>
+                          Horas utilizadas (HU){" "}
+                          <span className="text-red-500">*</span>
                         </label>
                         <input
                           id="horasUtilizadas"
@@ -531,7 +594,9 @@ export default function NovaAtuacaoPage() {
                           value={formData.horasUtilizadas}
                           onChange={handleChange}
                           className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors dark:bg-gray-700 dark:border-gray-600 dark:text-white ${
-                            errors.horasUtilizadas ? "border-red-500" : "border-gray-300"
+                            errors.horasUtilizadas
+                              ? "border-red-500"
+                              : "border-gray-300"
                           }`}
                           placeholder="Ex: 2"
                         />
@@ -578,7 +643,8 @@ export default function NovaAtuacaoPage() {
                           htmlFor="statusAtividadeNoRegistro"
                           className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
                         >
-                          Status da atividade <span className="text-red-500">*</span>
+                          Status da atividade{" "}
+                          <span className="text-red-500">*</span>
                         </label>
                         <select
                           id="statusAtividadeNoRegistro"
@@ -590,7 +656,9 @@ export default function NovaAtuacaoPage() {
                           }}
                           disabled={!formData.atividadeId}
                           className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors dark:bg-gray-700 dark:border-gray-600 dark:text-white ${
-                            errors.statusAtividadeNoRegistro ? "border-red-500" : "border-gray-300"
+                            errors.statusAtividadeNoRegistro
+                              ? "border-red-500"
+                              : "border-gray-300"
                           } ${!formData.atividadeId ? "opacity-60 cursor-not-allowed" : ""}`}
                         >
                           {statusOptions.map((s) => (
@@ -605,7 +673,8 @@ export default function NovaAtuacaoPage() {
                           </p>
                         )}
                         <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                          Esse status será salvo na atuação e aplicado na atividade do projeto.
+                          Esse status será salvo na atuação e aplicado na
+                          atividade do projeto.
                         </p>
                       </div>
                     </div>
@@ -619,7 +688,13 @@ export default function NovaAtuacaoPage() {
                           Horas estimadas (HE)
                         </p>
                         <p className="text-lg font-semibold text-gray-900 dark:text-white">
-                          {!atividadeSelecionada ? "-" : isAtividadeAvulsa ? "Ilimitadas" : `${horasEstimadas}h`}
+                          {!atividadeSelecionada
+                            ? "-"
+                            : isAtividadeAvulsa && criarAtividade
+                              ? `${horasEstimadas}h`
+                              : isAtividadeAvulsa
+                                ? "Ilimitadas"
+                                : `${horasEstimadas}h`}
                         </p>
                       </div>
 
@@ -631,20 +706,24 @@ export default function NovaAtuacaoPage() {
                           className={`w-full px-4 py-3 border rounded-lg ${
                             !atividadeSelecionada
                               ? "border-gray-300 bg-gray-50 text-gray-700 dark:border-gray-600 dark:bg-gray-900/30 dark:text-gray-300"
-                              : isAtividadeAvulsa
-                              ? "border-blue-300 bg-blue-50 text-blue-800 dark:border-blue-900/40 dark:bg-blue-900/20 dark:text-blue-300"
-                              : saldoAposSalvar >= 0
-                              ? "border-green-300 bg-green-50 text-green-800 dark:border-green-900/40 dark:bg-green-900/20 dark:text-green-300"
-                              : "border-red-300 bg-red-50 text-red-800 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-300"
+                              : isAtividadeAvulsa && !criarAtividade
+                                ? "border-blue-300 bg-blue-50 text-blue-800 dark:border-blue-900/40 dark:bg-blue-900/20 dark:text-blue-300"
+                                : saldoAposSalvar >= 0
+                                  ? "border-green-300 bg-green-50 text-green-800 dark:border-green-900/40 dark:bg-green-900/20 dark:text-green-300"
+                                  : "border-red-300 bg-red-50 text-red-800 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-300"
                           }`}
                         >
                           {!atividadeSelecionada ? (
                             <span>-</span>
-                          ) : isAtividadeAvulsa ? (
+                          ) : isAtividadeAvulsa && !criarAtividade ? (
                             <span>
-                              <span className="font-semibold">Atividade avulsa</span>
+                              <span className="font-semibold">
+                                Atividade avulsa
+                              </span>
                               <br />
-                              <span className="text-xs">Sem limite de horas</span>
+                              <span className="text-xs">
+                                Sem limite de horas
+                              </span>
                             </span>
                           ) : saldoAposSalvar >= 0 ? (
                             <span>
@@ -663,7 +742,7 @@ export default function NovaAtuacaoPage() {
                           )}
                         </div>
                         <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                          {isAtividadeAvulsa
+                          {isAtividadeAvulsa && !criarAtividade
                             ? "Use para registrar tarefas não mapeadas, reuniões ou planejamentos."
                             : "Calculado a partir de HE e HU acumulado."}
                         </p>
@@ -779,5 +858,3 @@ export default function NovaAtuacaoPage() {
     </div>
   );
 }
-
-
